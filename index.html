@@ -1,0 +1,752 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Oaxaca Rental Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400;500;600&display=swap">
+<style>
+ .leaflet-pane, .leaflet-tile, .leaflet-marker-icon, .leaflet-marker-shadow, .leaflet-tile-container, .leaflet-pane > svg, .leaflet-pane > canvas, .leaflet-zoom-box, .leaflet-image-layer, .leaflet-layer { position: absolute; left: 0; top: 0; } .leaflet-container { overflow: hidden; } .leaflet-tile, .leaflet-marker-icon, .leaflet-marker-shadow { -webkit-user-select: none; -moz-user-select: none; user-select: none; -webkit-user-drag: none; } .leaflet-tile::selection { background: transparent; } .leaflet-safari .leaflet-tile { image-rendering: -webkit-optimize-contrast; } .leaflet-safari .leaflet-tile-container { width: 1600px; height: 1600px; -webkit-transform-origin: 0 0; } .leaflet-marker-icon, .leaflet-marker-shadow { display: block; } .leaflet-container .leaflet-overlay-pane svg { max-width: none !important; max-height: none !important; } .leaflet-container .leaflet-marker-pane img, .leaflet-container .leaflet-shadow-pane img, .leaflet-container .leaflet-tile-pane img, .leaflet-container img.leaflet-image-layer, .leaflet-container .leaflet-tile { max-width: none !important; max-height: none !important; width: auto; padding: 0; } .leaflet-container img.leaflet-tile { mix-blend-mode: plus-lighter; } .leaflet-container.leaflet-touch-zoom { -ms-touch-action: pan-x pan-y; touch-action: pan-x pan-y; } .leaflet-container.leaflet-touch-drag { -ms-touch-action: pinch-zoom; touch-action: none; touch-action: pinch-zoom; } .leaflet-container.leaflet-touch-drag.leaflet-touch-zoom { -ms-touch-action: none; touch-action: none; } .leaflet-container { -webkit-tap-highlight-color: transparent; } .leaflet-container a { -webkit-tap-highlight-color: rgba(51, 181, 229, 0.4); } .leaflet-tile { filter: inherit; visibility: hidden; } .leaflet-tile-loaded { visibility: inherit; } .leaflet-zoom-box { width: 0; height: 0; -moz-box-sizing: border-box; box-sizing: border-box; z-index: 800; } .leaflet-overlay-pane svg { -moz-user-select: none; } .leaflet-pane { z-index: 400; } .leaflet-tile-pane { z-index: 200; } .leaflet-overlay-pane { z-index: 400; } .leaflet-shadow-pane { z-index: 500; } .leaflet-marker-pane { z-index: 600; } .leaflet-tooltip-pane { z-index: 650; } .leaflet-popup-pane { z-index: 700; } .leaflet-map-pane canvas { z-index: 100; } .leaflet-map-pane svg { z-index: 200; } .leaflet-vml-shape { width: 1px; height: 1px; } .leaflet-control { position: relative; z-index: 800; pointer-events: visiblePainted; pointer-events: auto; } .leaflet-top, .leaflet-bottom { position: absolute; z-index: 1000; pointer-events: none; } .leaflet-top { top: 0; } .leaflet-right { right: 0; } .leaflet-bottom { bottom: 0; } .leaflet-left { left: 0; } .leaflet-control { float: left; clear: both; } .leaflet-right .leaflet-control { float: right; } .leaflet-top .leaflet-control { margin-top: 10px; } .leaflet-bottom .leaflet-control { margin-bottom: 10px; } .leaflet-left .leaflet-control { margin-left: 10px; } .leaflet-right .leaflet-control { margin-right: 10px; } .leaflet-fade-anim .leaflet-popup { opacity: 0; -webkit-transition: opacity 0.2s linear; -moz-transition: opacity 0.2s linear; transition: opacity 0.2s linear; } .leaflet-fade-anim .leaflet-map-pane .leaflet-popup { opacity: 1; } .leaflet-zoom-animated { -webkit-transform-origin: 0 0; -ms-transform-origin: 0 0; transform-origin: 0 0; } svg.leaflet-zoom-animated { will-change: transform; } .leaflet-zoom-anim .leaflet-zoom-animated { -webkit-transition: -webkit-transform 0.25s cubic-bezier(0,0,0.25,1); -moz-transition: -moz-transform 0.25s cubic-bezier(0,0,0.25,1); transition: transform 0.25s cubic-bezier(0,0,0.25,1); } .leaflet-zoom-anim .leaflet-tile, .leaflet-pan-anim .leaflet-tile { -webkit-transition: none; -moz-transition: none; transition: none; } .leaflet-zoom-anim .leaflet-zoom-hide { visibility: hidden; } .leaflet-interactive { cursor: pointer; } .leaflet-grab { cursor: -webkit-grab; cursor: -moz-grab; cursor: grab; } .leaflet-crosshair, .leaflet-crosshair .leaflet-interactive { cursor: crosshair; } .leaflet-popup-pane, .leaflet-control { cursor: auto; } .leaflet-dragging .leaflet-grab, .leaflet-dragging .leaflet-grab .leaflet-interactive, .leaflet-dragging .leaflet-marker-draggable { cursor: move; cursor: -webkit-grabbing; cursor: -moz-grabbing; cursor: grabbing; } .leaflet-marker-icon, .leaflet-marker-shadow, .leaflet-image-layer, .leaflet-pane > svg path, .leaflet-tile-container { pointer-events: none; } .leaflet-marker-icon.leaflet-interactive, .leaflet-image-layer.leaflet-interactive, .leaflet-pane > svg path.leaflet-interactive, svg.leaflet-image-layer.leaflet-interactive path { pointer-events: visiblePainted; pointer-events: auto; } .leaflet-container { background: #ddd; outline-offset: 1px; } .leaflet-container a { color: #0078A8; } .leaflet-zoom-box { border: 2px dotted #38f; background: rgba(255,255,255,0.5); } .leaflet-container { font-family: "Helvetica Neue", Arial, Helvetica, sans-serif; font-size: 12px; font-size: 0.75rem; line-height: 1.5; } .leaflet-bar { box-shadow: 0 1px 5px rgba(0,0,0,0.65); border-radius: 4px; } .leaflet-bar a { background-color: #fff; border-bottom: 1px solid #ccc; width: 26px; height: 26px; line-height: 26px; display: block; text-align: center; text-decoration: none; color: black; } .leaflet-bar a, .leaflet-control-layers-toggle { background-position: 50% 50%; background-repeat: no-repeat; display: block; } .leaflet-bar a:hover, .leaflet-bar a:focus { background-color: #f4f4f4; } .leaflet-bar a:first-child { border-top-left-radius: 4px; border-top-right-radius: 4px; } .leaflet-bar a:last-child { border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; border-bottom: none; } .leaflet-bar a.leaflet-disabled { cursor: default; background-color: #f4f4f4; color: #bbb; } .leaflet-touch .leaflet-bar a { width: 30px; height: 30px; line-height: 30px; } .leaflet-touch .leaflet-bar a:first-child { border-top-left-radius: 2px; border-top-right-radius: 2px; } .leaflet-touch .leaflet-bar a:last-child { border-bottom-left-radius: 2px; border-bottom-right-radius: 2px; } .leaflet-control-zoom-in, .leaflet-control-zoom-out { font: bold 18px 'Lucida Console', Monaco, monospace; text-indent: 1px; } .leaflet-touch .leaflet-control-zoom-in, .leaflet-touch .leaflet-control-zoom-out { font-size: 22px; } .leaflet-control-layers { box-shadow: 0 1px 5px rgba(0,0,0,0.4); background: #fff; border-radius: 5px; } .leaflet-touch .leaflet-control-layers-toggle { width: 44px; height: 44px; } .leaflet-control-layers .leaflet-control-layers-list, .leaflet-control-layers-expanded .leaflet-control-layers-toggle { display: none; } .leaflet-control-layers-expanded .leaflet-control-layers-list { display: block; position: relative; } .leaflet-control-layers-expanded { padding: 6px 10px 6px 6px; color: #333; background: #fff; } .leaflet-control-layers-scrollbar { overflow-y: scroll; overflow-x: hidden; padding-right: 5px; } .leaflet-control-layers-selector { margin-top: 2px; position: relative; top: 1px; } .leaflet-control-layers label { display: block; font-size: 13px; font-size: 1.08333em; } .leaflet-control-layers-separator { height: 0; border-top: 1px solid #ddd; margin: 5px -10px 5px -6px; } .leaflet-container .leaflet-control-attribution { background: #fff; background: rgba(255, 255, 255, 0.8); margin: 0; } .leaflet-control-attribution, .leaflet-control-scale-line { padding: 0 5px; color: #333; line-height: 1.4; } .leaflet-control-attribution a { text-decoration: none; } .leaflet-control-attribution a:hover, .leaflet-control-attribution a:focus { text-decoration: underline; } .leaflet-attribution-flag { display: inline !important; vertical-align: baseline !important; width: 1em; height: 0.6669em; } .leaflet-left .leaflet-control-scale { margin-left: 5px; } .leaflet-bottom .leaflet-control-scale { margin-bottom: 5px; } .leaflet-control-scale-line { border: 2px solid #777; border-top: none; line-height: 1.1; padding: 2px 5px 1px; white-space: nowrap; -moz-box-sizing: border-box; box-sizing: border-box; background: rgba(255, 255, 255, 0.8); text-shadow: 1px 1px #fff; } .leaflet-control-scale-line:not(:first-child) { border-top: 2px solid #777; border-bottom: none; margin-top: -2px; } .leaflet-control-scale-line:not(:first-child):not(:last-child) { border-bottom: 2px solid #777; } .leaflet-touch .leaflet-control-attribution, .leaflet-touch .leaflet-control-layers, .leaflet-touch .leaflet-bar { box-shadow: none; } .leaflet-touch .leaflet-control-layers, .leaflet-touch .leaflet-bar { border: 2px solid rgba(0,0,0,0.2); background-clip: padding-box; } .leaflet-popup { position: absolute; text-align: center; margin-bottom: 20px; } .leaflet-popup-content-wrapper { padding: 1px; text-align: left; border-radius: 12px; } .leaflet-popup-content { margin: 13px 24px 13px 20px; line-height: 1.3; font-size: 13px; font-size: 1.08333em; min-height: 1px; } .leaflet-popup-content p { margin: 17px 0; margin: 1.3em 0; } .leaflet-popup-tip-container { width: 40px; height: 20px; position: absolute; left: 50%; margin-top: -1px; margin-left: -20px; overflow: hidden; pointer-events: none; } .leaflet-popup-tip { width: 17px; height: 17px; padding: 1px; margin: -10px auto 0; pointer-events: auto; -webkit-transform: rotate(45deg); -moz-transform: rotate(45deg); -ms-transform: rotate(45deg); transform: rotate(45deg); } .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: white; color: #333; box-shadow: 0 3px 14px rgba(0,0,0,0.4); } .leaflet-container a.leaflet-popup-close-button { position: absolute; top: 0; right: 0; border: none; text-align: center; width: 24px; height: 24px; font: 16px/24px Tahoma, Verdana, sans-serif; color: #757575; text-decoration: none; background: transparent; } .leaflet-container a.leaflet-popup-close-button:hover, .leaflet-container a.leaflet-popup-close-button:focus { color: #585858; } .leaflet-popup-scrolled { overflow: auto; } .leaflet-oldie .leaflet-popup-content-wrapper { -ms-zoom: 1; } .leaflet-oldie .leaflet-popup-tip { width: 24px; margin: 0 auto; -ms-filter: "progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678)"; filter: progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678); } .leaflet-oldie .leaflet-control-zoom, .leaflet-oldie .leaflet-control-layers, .leaflet-oldie .leaflet-popup-content-wrapper, .leaflet-oldie .leaflet-popup-tip { border: 1px solid #999; } .leaflet-div-icon { background: #fff; border: 1px solid #666; } .leaflet-tooltip { position: absolute; padding: 6px; background-color: #fff; border: 1px solid #fff; border-radius: 3px; color: #222; white-space: nowrap; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.4); } .leaflet-tooltip.leaflet-interactive { cursor: pointer; pointer-events: auto; } .leaflet-tooltip-top:before, .leaflet-tooltip-bottom:before, .leaflet-tooltip-left:before, .leaflet-tooltip-right:before { position: absolute; pointer-events: none; border: 6px solid transparent; background: transparent; content: ""; } .leaflet-tooltip-bottom { margin-top: 6px; } .leaflet-tooltip-top { margin-top: -6px; } .leaflet-tooltip-bottom:before, .leaflet-tooltip-top:before { left: 50%; margin-left: -6px; } .leaflet-tooltip-top:before { bottom: 0; margin-bottom: -12px; border-top-color: #fff; } .leaflet-tooltip-bottom:before { top: 0; margin-top: -12px; margin-left: -6px; border-bottom-color: #fff; } .leaflet-tooltip-left { margin-left: -6px; } .leaflet-tooltip-right { margin-left: 6px; } .leaflet-tooltip-left:before, .leaflet-tooltip-right:before { top: 50%; margin-top: -6px; } .leaflet-tooltip-left:before { right: 0; margin-right: -12px; border-left-color: #fff; } .leaflet-tooltip-right:before { left: 0; margin-left: -12px; border-right-color: #fff; } @media print { .leaflet-control { -webkit-print-color-adjust: exact; print-color-adjust: exact; } } 
+
+/* Layout: listings column (header, filters, list) beside a framed vector map; on phones the map sits between header and list.
+   Palette: cantera-verde greens (the green stone of Oaxaca's centro) with grana cochinilla crimson as the single accent. */
+:root{
+  --bg:#E8ECE5; --panel:#F5F7F2; --panel-a:rgba(245,247,242,.88); --ink:#17201B; --muted:#56635A; --line:#D0D8CE;
+  --hover:#EBF0E7; --sel:#E3E9DE;
+  --land:#E0E7DA; --urban:#CAD4C3; --edge:#93A396; --road:#B9833A; --ring:#7A8B7E; --outside:#D6DDD2;
+  --accent:#A3174B; --accent-ink:#FFFFFF; --leased:#748279; --ok:#2C6A48; --ok-bg:#DCEBDF; --warn-bg:#F6E9D7; --warn:#7A4A12;
+  --shadow:rgba(23,32,27,.22);
+  --display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --body:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101512; --panel:#161C18; --panel-a:rgba(22,28,24,.9); --ink:#E4EBE4; --muted:#9AA79E; --line:#29322C;
+    --hover:#1C241F; --sel:#212B24;
+    --land:#1A211D; --urban:#243029; --edge:#4D5C52; --road:#C08C46; --ring:#6F8075; --outside:#121815;
+    --accent:#EF5F8E; --accent-ink:#22060F; --leased:#7D8B82; --ok:#7CC79A; --ok-bg:#1D3326; --warn-bg:#33270F; --warn:#E6BC7E;
+    --shadow:rgba(0,0,0,.5); color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101512; --panel:#161C18; --panel-a:rgba(22,28,24,.9); --ink:#E4EBE4; --muted:#9AA79E; --line:#29322C;
+  --hover:#1C241F; --sel:#212B24;
+  --land:#1A211D; --urban:#243029; --edge:#4D5C52; --road:#C08C46; --ring:#6F8075; --outside:#121815;
+  --accent:#EF5F8E; --accent-ink:#22060F; --leased:#7D8B82; --ok:#7CC79A; --ok-bg:#1D3326; --warn-bg:#33270F; --warn:#E6BC7E;
+  --shadow:rgba(0,0,0,.5); color-scheme:dark;
+}
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--body);-webkit-font-smoothing:antialiased}
+*,*::before,*::after{box-sizing:border-box}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{
+  display:grid;height:100%;gap:16px;
+  grid-template-columns:clamp(340px,31vw,420px) minmax(0,1fr);
+  grid-template-rows:auto minmax(0,1fr);
+  grid-template-areas:"head map" "side map";
+  padding-block:16px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.head{grid-area:head;min-width:0}
+.side{grid-area:side;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;margin-right:-8px;padding-right:8px}
+.mapwrap{grid-area:map;position:relative;min-width:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--outside)}
+#map{position:absolute;inset:0}
+
+.eyebrow{margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{margin:0;font:750 30px/1.05 var(--display);letter-spacing:-.02em;text-wrap:balance;font-variation-settings:"opsz" 96}
+.summary{margin:8px 0 0;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.summary b{color:var(--ink);font-weight:600}
+
+/* Filters */
+.controls{display:grid;gap:14px;padding:14px 0 16px;border-bottom:1px solid var(--line)}
+.controls fieldset{border:0;margin:0;padding:0;min-width:0}
+.lbl{display:block;margin:0 0 6px;padding:0;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.seg-opts{display:flex;border:1px solid var(--line);border-radius:9px;padding:2px;background:var(--panel);gap:2px}
+.seg-opts label{flex:1 1 0;position:relative;min-width:0}
+.seg-opts input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg-opts span{display:block;text-align:center;padding:6px 6px;border-radius:7px;font-size:13px;font-weight:500;color:var(--muted);white-space:nowrap;cursor:pointer}
+.seg-opts input:checked + span{background:var(--ink);color:var(--bg)}
+.seg-opts input:focus-visible + span{outline:2px solid var(--accent);outline-offset:1px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rent-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.rent-head output{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);margin:2px 0 0}
+.inp{width:100%;font:500 13px/1.2 var(--body);color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-variant-numeric:tabular-nums}
+select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 52%,calc(100% - 10px) 52%;background-size:5px 5px;background-repeat:no-repeat;padding-right:28px}
+
+/* List */
+.list{list-style:none;margin:0;padding:0}
+.row{border-bottom:1px solid var(--line)}
+.row-btn{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;width:100%;text-align:left;font:inherit;color:inherit;background:none;border:0;padding:14px 8px 14px 6px;cursor:pointer;border-radius:10px}
+.row-btn:hover,.row.hot .row-btn{background:var(--hover)}
+.row.sel{background:var(--sel);border-radius:10px;border-bottom-color:transparent}
+.row.sel .row-btn:hover{background:transparent}
+.num{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:700 12px/1 var(--display);background:var(--accent);color:var(--accent-ink);margin-top:1px;font-variant-numeric:tabular-nums}
+.row.leased .num{background:transparent;color:var(--leased);box-shadow:inset 0 0 0 2px var(--leased)}
+.row-body{display:grid;gap:2px;min-width:0}
+.row-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.price{font:700 18px/1.2 var(--display);letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.price small{font:500 12px var(--body);color:var(--muted);margin-left:2px}
+.row-title{font-weight:600}
+.row-meta{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.row-sub{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.chip{flex:none;font-size:11px;font-weight:600;letter-spacing:.02em;padding:2px 8px;border-radius:99px;color:var(--leased);box-shadow:inset 0 0 0 1px var(--line);white-space:nowrap}
+.chip.ok{color:var(--ok);background:var(--ok-bg);box-shadow:none}
+.detail{padding:0 12px 14px 46px;display:grid;gap:10px}
+.detail p{margin:0}
+.near{font-size:13px}
+.tags{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.tags li{font-size:12px;padding:3px 8px;border-radius:6px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line)}
+.note{font-size:12.5px;background:var(--warn-bg);color:var(--warn);padding:8px 10px;border-radius:8px}
+.approx{font-size:12px;color:var(--muted)}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.links a,.links button{font:600 13px/1 var(--body);text-decoration:none;padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.links a.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.links .to-map{display:none}
+.empty{color:var(--muted);padding:20px 4px;margin:0}
+
+.foot{padding:18px 2px 8px;display:grid;gap:10px;font-size:12px;color:var(--muted)}
+.foot p{margin:0;max-width:62ch}
+.contact{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--ink);font-size:13px}
+.contact .tel{font-weight:600;font-variant-numeric:tabular-nums;user-select:all}
+.mini{font:600 12px/1 var(--body);padding:6px 9px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;text-decoration:none}
+
+/* Map chrome */
+.leaflet-container{background:var(--outside);font:13px/1.4 var(--body);color:var(--ink)}
+.leaflet-container a{color:var(--accent)}
+.muni-fill{fill:var(--land);fill-opacity:1;stroke:none}
+.urban{fill:var(--urban);fill-opacity:1;stroke:none}
+.muni-edge{fill:none;stroke:var(--edge);stroke-width:1;stroke-dasharray:3 4}
+.road{fill:none;stroke:var(--road);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:.85}
+.ring{fill:none;stroke:var(--ring);stroke-width:1;stroke-dasharray:1 5;stroke-linecap:round}
+.uncert{fill:var(--accent);fill-opacity:.08;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:5 5}
+.leaflet-pane.leaflet-labels-pane{pointer-events:none}
+.mlabel{white-space:nowrap;transform:translate(-50%,-50%);font:500 11px/1 var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-shadow:0 0 3px var(--land),0 0 3px var(--land),0 0 6px var(--land)}
+.mlabel.big{font-size:12px;letter-spacing:.1em;font-weight:600}
+.lm{position:relative;white-space:nowrap}
+.lm i{position:absolute;left:-4px;top:-4px;width:8px;height:8px;background:var(--ink);transform:rotate(45deg)}
+.lm span{position:absolute;left:9px;top:-8px;font:600 12px/1 var(--display);color:var(--ink);text-shadow:0 0 3px var(--land),0 0 3px var(--land),0 0 6px var(--land)}
+.lm.main i{left:-6px;top:-6px;width:12px;height:12px;box-shadow:0 0 0 3px var(--land)}
+.lm.main span{left:12px;top:-9px;font-size:14px}
+.ringlbl{transform:translate(-50%,-50%);font:600 10.5px/1 var(--body);color:var(--ring);background:var(--land);padding:2px 5px;border-radius:4px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.shield{transform:translate(-50%,-50%);font:700 10px/1 var(--body);letter-spacing:.03em;color:var(--road);background:var(--panel);border:1.5px solid var(--road);padding:3px 5px;border-radius:5px 5px 9px 9px;white-space:nowrap}
+.z-far .minor,.z-mid .minor{display:none}
+.z-far .small{display:none}
+
+.pin{position:relative;width:0;height:0;--tx:0px;--ty:0px;--s:1}
+.pin .leader{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.pin .leader line{stroke:var(--ink);stroke-opacity:.55;stroke-width:1.2}
+.pin .anchor{position:absolute;left:-3px;top:-3px;width:6px;height:6px;border-radius:50%;background:var(--ink);display:none}
+.pin.moved .anchor{display:block}
+.pin .dot{position:absolute;left:0;top:0;width:28px;height:28px;padding:0;margin:0;border-radius:50%;border:2px solid var(--panel);background:var(--accent);color:var(--accent-ink);font:700 12px/1 var(--display);display:grid;place-items:center;cursor:pointer;pointer-events:auto;box-shadow:0 1px 4px var(--shadow);transform:translate(calc(var(--tx) - 14px),calc(var(--ty) - 14px)) scale(var(--s));transition:transform .15s ease;font-variant-numeric:tabular-nums}
+.pin.leased .dot{background:var(--panel);color:var(--leased);border-color:var(--leased)}
+/* Propiedades.com listings get a rounded-square marker, in the map and in the list */
+.pin.pc .dot{border-radius:8px}
+.row.pc .num{border-radius:8px}
+.pin.hot,.pin.sel{--s:1.22}
+.pin.sel .dot{box-shadow:0 0 0 3px var(--panel),0 0 0 5px var(--accent),0 2px 8px var(--shadow)}
+.pin .tag{position:absolute;left:calc(var(--tx) + 20px);top:calc(var(--ty) - 11px);display:none;background:var(--ink);color:var(--bg);font:600 12px/1 var(--body);padding:5px 7px;border-radius:6px;white-space:nowrap;pointer-events:none;font-variant-numeric:tabular-nums}
+.pin.hot .tag,.pin.sel .tag{display:block}
+
+.leaflet-bar,.leaflet-touch .leaflet-bar{border:1px solid var(--line);box-shadow:0 1px 3px var(--shadow);border-radius:9px;overflow:hidden}
+.leaflet-bar a,.leaflet-touch .leaflet-bar a{background:var(--panel);color:var(--ink);border-bottom-color:var(--line)}
+.leaflet-bar a:hover{background:var(--hover);color:var(--ink)}
+.leaflet-bar a.leaflet-disabled{background:var(--panel);color:var(--muted);opacity:.5}
+.leaflet-top.leaflet-right{top:env(safe-area-inset-top,0px)}
+.leaflet-control-attribution,.leaflet-container .leaflet-control-attribution{background:var(--panel-a);color:var(--muted);font-size:10.5px;padding:2px 6px;border-top-left-radius:6px}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--ink);box-shadow:0 4px 18px var(--shadow)}
+.leaflet-popup-content-wrapper{border-radius:12px}
+.leaflet-popup-content{margin:14px 16px 14px;font-size:13px;line-height:1.45}
+.leaflet-container a.leaflet-popup-close-button{color:var(--muted);top:4px;right:4px}
+.pop p{margin:0}
+.pop-k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.pop-t{font:700 15px/1.25 var(--display);margin:3px 0 6px!important;padding-right:14px}
+.pop-p{display:flex;align-items:center;gap:8px;font:700 17px/1.2 var(--display);font-variant-numeric:tabular-nums}
+.pop-p small{font:500 12px var(--body);color:var(--muted)}
+.pop-m{color:var(--muted);font-size:12.5px;margin:2px 0 10px!important;font-variant-numeric:tabular-nums}
+.pop a{font-weight:600;text-decoration:none}
+
+.fit{position:absolute;z-index:800;top:max(12px,env(safe-area-inset-top,0px));left:12px;font:600 13px/1 var(--body);padding:9px 12px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink);box-shadow:0 1px 3px var(--shadow);cursor:pointer}
+.fit:hover{background:var(--hover)}
+.key{position:absolute;z-index:1001;left:12px;bottom:12px;background:var(--panel-a);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:12px;max-width:calc(100% - 24px);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.key summary{cursor:pointer;font-weight:600;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.key ul{list-style:none;margin:8px 0 2px;padding:0;display:grid;gap:6px}
+.key li{display:flex;align-items:center;gap:8px}
+.k{flex:none;width:18px;height:14px;display:grid;place-items:center}
+.k-dot{width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--panel);box-shadow:0 0 0 1px var(--line)}
+.k-dot.l{background:var(--panel);border-color:var(--leased);box-shadow:none}
+.k-dot.sq{border-radius:4px}
+.k-circle{width:16px;height:16px;border-radius:50%;border:1.5px dashed var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.k-ring{width:18px;height:0;border-top:2px dotted var(--ring)}
+.k-urban{width:18px;height:12px;border-radius:3px;background:var(--urban);box-shadow:inset 0 0 0 1px var(--line)}
+.k-road{width:18px;height:0;border-top:3px solid var(--road);border-radius:2px}
+.k-edge{width:18px;height:0;border-top:1.5px dashed var(--edge)}
+
+@media (max-width:859px){
+  html,body{height:auto}
+  .app{height:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;grid-template-areas:"head" "map" "side";gap:14px}
+  .mapwrap{height:62vh;height:62svh;min-height:340px}
+  .side{overflow:visible;margin-right:0;padding-right:0}
+  h1{font-size:27px}
+  .links .to-map{display:inline-block}
+}
+@media (prefers-reduced-motion:reduce){
+  .pin .dot{transition:none}
+}
+</style>
+
+<div class="app">
+  <header class="head">
+    <p class="eyebrow">Residential rentals · Real Estate Oaxaca + Propiedades.com</p>
+    <h1>Oaxaca Rental Map</h1>
+    <p class="summary" id="summary">19 listings around Oaxaca de Juárez</p>
+  </header>
+
+  <main class="mapwrap" id="mapwrap">
+    <div id="map" role="region" aria-label="Map of rental listings"></div>
+    <button class="fit" id="fit" type="button">Show all</button>
+    <details class="key" id="key">
+      <summary>Map key</summary>
+      <ul>
+        <li><span class="k"><span class="k-dot"></span></span>Real Estate Oaxaca, available</li>
+        <li><span class="k"><span class="k-dot sq"></span></span>Propiedades.com, furnished</li>
+        <li><span class="k"><span class="k-dot l"></span></span>Leased long-term</li>
+        <li><span class="k"><span class="k-circle"></span></span>Where the selected home could be</li>
+        <li><span class="k"><span class="k-ring"></span></span>2, 5 and 10 km from the Zócalo</li>
+        <li><span class="k"><span class="k-urban"></span></span>Built-up area</li>
+        <li><span class="k"><span class="k-road"></span></span>Federal highway</li>
+        <li><span class="k"><span class="k-edge"></span></span>Municipal boundary</li>
+      </ul>
+    </details>
+  </main>
+
+  <aside class="side" aria-label="Listings">
+    <form class="controls" id="controls" autocomplete="off">
+      <fieldset>
+        <legend class="lbl">Status</legend>
+        <div class="seg-opts">
+          <label><input type="radio" name="status" id="st-all" value="all" checked><span>All</span></label>
+          <label><input type="radio" name="status" id="st-av" value="available"><span>Available</span></label>
+          <label><input type="radio" name="status" id="st-le" value="leased"><span>Leased</span></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend class="lbl">Source</legend>
+        <div class="seg-opts">
+          <label><input type="radio" name="src" id="src-all" value="all" checked><span>All</span></label>
+          <label><input type="radio" name="src" id="src-reo" value="reo"><span>RE Oaxaca</span></label>
+          <label><input type="radio" name="src" id="src-pc" value="pc"><span>Propiedades</span></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend class="lbl">Furnished</legend>
+        <div class="seg-opts">
+          <label><input type="radio" name="furn" id="furn-any" value="any" checked><span>Any</span></label>
+          <label><input type="radio" name="furn" id="furn-yes" value="yes"><span>Furnished only</span></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend class="lbl">Bedrooms</legend>
+        <div class="seg-opts">
+          <label><input type="radio" name="beds" id="bd-0" value="0" checked><span>Any</span></label>
+          <label><input type="radio" name="beds" id="bd-2" value="2"><span>2+</span></label>
+          <label><input type="radio" name="beds" id="bd-3" value="3"><span>3+</span></label>
+          <label><input type="radio" name="beds" id="bd-4" value="4"><span>4+</span></label>
+        </div>
+      </fieldset>
+      <div>
+        <div class="rent-head"><label class="lbl" for="maxrent">Max monthly rent</label><output id="maxout" for="maxrent">Any</output></div>
+        <input type="range" id="maxrent" min="0" max="100" step="1" value="100">
+      </div>
+      <div class="pair">
+        <fieldset>
+          <legend class="lbl">Show prices in</legend>
+          <div class="seg-opts">
+            <label><input type="radio" name="cur" id="cur-mxn" value="MXN" checked><span>MXN</span></label>
+            <label><input type="radio" name="cur" id="cur-usd" value="USD"><span>USD</span></label>
+          </div>
+        </fieldset>
+        <div>
+          <label class="lbl" for="rate">Pesos per dollar</label>
+          <input class="inp" type="number" id="rate" min="5" max="40" step="0.05" value="18.00" inputmode="decimal">
+        </div>
+      </div>
+      <div>
+        <label class="lbl" for="sort">Sort by</label>
+        <select class="inp" id="sort">
+          <option value="price-asc">Lowest rent first</option>
+          <option value="price-desc">Highest rent first</option>
+          <option value="dist">Closest to the Zócalo</option>
+          <option value="beds">Most bedrooms</option>
+          <option value="site">Listing number</option>
+        </select>
+      </div>
+    </form>
+
+    <ol class="list" id="list"></ol>
+    <p class="empty" id="empty" hidden>No listings match. Raise the max rent or loosen a filter.</p>
+
+    <footer class="foot">
+      <div class="contact">
+        <span>Real Estate Oaxaca inquiries by WhatsApp</span>
+        <span class="tel" id="tel">+52 951 127 9018</span>
+        <button class="mini" type="button" id="copytel">Copy</button>
+        <a class="mini" href="https://api.whatsapp.com/send?phone=529511279018" target="_blank" rel="noopener">Open WhatsApp ↗</a>
+      </div>
+      <p>Listings, prices and lease status as posted on <a href="https://www.realestateoaxaca.com/rentals-residential" target="_blank" rel="noopener">realestateoaxaca.com/rentals-residential</a>, read 18 Nov 2026.</p>
+      <p>Listings 13–19 are every rental tagged furnished (Amueblado) among the 104 results on <a href="https://propiedades.com/oaxaca-centro-oaxaca-de-juarez/renta" target="_blank" rel="noopener">propiedades.com's Oaxaca Centro rentals</a>, read 18 Nov 2026. Outdoor-space notes come from each listing's tags and the visible start of its description; the full descriptions were not readable. Contact those advertisers through each listing's page.</p>
+      <p>Pins are approximate. Real Estate Oaxaca listings name a neighborhood or landmark, and Propiedades.com listings give a street but no exact map point, so each pin sits in the stated area and the dashed circle shows how far off it could be. Pins that would overlap are nudged apart, with a thin line back to their spot.</p>
+      <p>Basemap drawn from municipal boundaries (CONABIO, 2023) and Natural Earth highways and built-up area, which are generalized. Distances are straight-line from the Zócalo. Dollar and peso conversions use the rate you set above.</p>
+    </footer>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+(function(){
+"use strict";
+var GEO = {"munis":{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"n":"Teotitlán del Valle"},"geometry":{"type":"Polygon","coordinates":[[[-96.59,17.04467],[-96.59601,17.04803],[-96.59037,17.05187],[-96.59,17.05266],[-96.59,17.04467]]]}},{"type":"Feature","properties":{"n":"San Lorenzo Cacaotepec"},"geometry":{"type":"Polygon","coordinates":[[[-96.77815,17.15],[-96.77811,17.14851],[-96.77194,17.1487],[-96.76935,17.14095],[-96.77547,17.13911],[-96.77786,17.14462],[-96.78175,17.14436],[-96.78203,17.14138],[-96.77768,17.13731],[-96.7801,17.13418],[-96.77337,17.12667],[-96.7779,17.12555],[-96.77844,17.12489],[-96.77828,17.1237],[-96.78038,17.12352],[-96.78205,17.12661],[-96.78235,17.12837],[-96.78373,17.12821],[-96.78325,17.12661],[-96.78719,17.12595],[-96.79213,17.12598],[-96.7928,17.12364],[-96.79241,17.122],[-96.79285,17.12066],[-96.79186,17.11935],[-96.79311,17.11895],[-96.79601,17.1191],[-96.79451,17.11724],[-96.80016,17.11709],[-96.79732,17.11228],[-96.79539,17.11215],[-96.79254,17.11118],[-96.78657,17.10773],[-96.78722,17.10497],[-96.79051,17.10549],[-96.79409,17.10706],[-96.7969,17.10693],[-96.79792,17.10735],[-96.80322,17.10644],[-96.81009,17.10357],[-96.81656,17.09821],[-96.80978,17.09055],[-96.82866,17.08909],[-96.83,17.09149],[-96.82991,17.10268],[-96.82574,17.11364],[-96.8236,17.12229],[-96.82209,17.12492],[-96.8245,17.12805],[-96.82256,17.13238],[-96.82649,17.14694],[-96.81317,17.14972],[-96.8131,17.15],[-96.80886,17.15],[-96.8086,17.14928],[-96.80925,17.1494],[-96.80925,17.14821],[-96.81258,17.1461],[-96.81103,17.1409],[-96.80642,17.14452],[-96.80317,17.14386],[-96.80716,17.15],[-96.77815,17.15]]]}},{"type":"Feature","properties":{"n":"San Jerónimo Tlacochahuaya"},"geometry":{"type":"Polygon","coordinates":[[[-96.59,17.00595],[-96.59117,17.00634],[-96.59133,17.00606],[-96.59237,17.00224],[-96.59511,17.0031],[-96.59407,17.00681],[-96.59214,17.00947],[-96.59149,17.0093],[-96.59124,17.01037],[-96.59156,17.01058],[-96.59,17.01162],[-96.59,17.00595]]]}},{"type":"Feature","properties":{"n":"Tlalixtac de Cabrera"},"geometry":{"type":"Polygon","coordinates":[[[-96.62249,17.1449],[-96.6222,17.14221],[-96.61824,17.13383],[-96.61184,17.12868],[-96.60724,17.11922],[-96.5978,17.1174],[-96.59222,17.12171],[-96.59,17.12213],[-96.59,17.0922],[-96.60259,17.09016],[-96.61405,17.07063],[-96.62474,17.07465],[-96.625,17.0738],[-96.62596,17.07357],[-96.6259,17.07285],[-96.6252,17.07246],[-96.62545,17.0713],[-96.62511,17.07058],[-96.62615,17.06916],[-96.62627,17.06768],[-96.62683,17.06655],[-96.63012,17.06476],[-96.63153,17.06459],[-96.63186,17.06501],[-96.63271,17.06426],[-96.63542,17.06365],[-96.63516,17.06191],[-96.63488,17.06199],[-96.63438,17.05531],[-96.63529,17.05322],[-96.63666,17.05325],[-96.63926,17.05416],[-96.63976,17.05293],[-96.64022,17.05315],[-96.64192,17.04887],[-96.64309,17.04366],[-96.64241,17.04344],[-96.64293,17.04145],[-96.66326,17.00961],[-96.66632,17.0093],[-96.66847,17.01051],[-96.66941,17.0123],[-96.66959,17.01569],[-96.66753,17.01806],[-96.6677,17.01943],[-96.66684,17.02125],[-96.66871,17.03073],[-96.6734,17.04858],[-96.67277,17.05059],[-96.67124,17.0517],[-96.66944,17.05544],[-96.66665,17.0567],[-96.66544,17.05855],[-96.66361,17.05936],[-96.66341,17.06055],[-96.66386,17.06065],[-96.66204,17.06451],[-96.66126,17.06713],[-96.66159,17.06721],[-96.66107,17.06896],[-96.6635,17.06955],[-96.66343,17.07149],[-96.66393,17.07153],[-96.66142,17.08141],[-96.66175,17.08156],[-96.66028,17.08926],[-96.66082,17.09034],[-96.65511,17.09379],[-96.65449,17.10453],[-96.65452,17.11523],[-96.65099,17.13278],[-96.65041,17.14173],[-96.65054,17.14575],[-96.64273,17.14411],[-96.63633,17.13553],[-96.63004,17.13929],[-96.62249,17.1449]]]}},{"type":"Feature","properties":{"n":"Villa de Zaachila"},"geometry":{"type":"Polygon","coordinates":[[[-96.82102,17.01247],[-96.81762,17.0098],[-96.81883,17.00988],[-96.81847,17.00941],[-96.81433,17.0064],[-96.81221,17.0031],[-96.81028,16.99613],[-96.81134,16.98463],[-96.81072,16.97631],[-96.79826,16.975],[-96.83,16.975],[-96.83,17.01658],[-96.8241,17.02108],[-96.82102,17.01247]]]}},{"type":"Feature","properties":{"n":"Santo Domingo Tomaltepec"},"geometry":{"type":"Polygon","coordinates":[[[-96.59037,17.05187],[-96.59601,17.04803],[-96.59828,17.04318],[-96.60211,17.04169],[-96.60501,17.04133],[-96.60927,17.03971],[-96.6146,17.04328],[-96.62053,17.04513],[-96.62451,17.04581],[-96.62398,17.04713],[-96.62562,17.04933],[-96.6235,17.04868],[-96.62233,17.05292],[-96.62757,17.05452],[-96.63077,17.05173],[-96.63529,17.05322],[-96.63438,17.05531],[-96.63488,17.06199],[-96.63516,17.06191],[-96.63542,17.06365],[-96.63271,17.06426],[-96.63186,17.06501],[-96.63153,17.06459],[-96.63012,17.06476],[-96.62683,17.06655],[-96.62627,17.06768],[-96.62615,17.06916],[-96.62511,17.07058],[-96.62545,17.0713],[-96.6252,17.07246],[-96.6259,17.07285],[-96.62596,17.07357],[-96.625,17.0738],[-96.62474,17.07465],[-96.61405,17.07063],[-96.60259,17.09016],[-96.59,17.0922],[-96.59,17.05266],[-96.59037,17.05187]]]}},{"type":"Feature","properties":{"n":"Rojas de Cuauhtémoc"},"geometry":{"type":"Polygon","coordinates":[[[-96.61518,17.02451],[-96.61365,17.02334],[-96.61329,17.02353],[-96.60889,17.02152],[-96.60832,17.02092],[-96.60902,17.01812],[-96.60848,17.01823],[-96.61244,17.01388],[-96.61385,17.01102],[-96.61331,17.01079],[-96.61377,17.00899],[-96.61337,17.0081],[-96.61511,17.00737],[-96.61532,17.00624],[-96.61483,17.00546],[-96.61449,17.00325],[-96.6154,17.00098],[-96.62463,17.0029],[-96.62517,16.99986],[-96.62599,16.98755],[-96.65561,16.98616],[-96.66286,17.00532],[-96.66454,17.00692],[-96.66326,17.00961],[-96.65547,17.0069],[-96.6482,17.00763],[-96.64467,17.00728],[-96.6245,17.01754],[-96.622,17.01696],[-96.62173,17.0194],[-96.61518,17.02451]]]}},{"type":"Feature","properties":{"n":"San Agustín de las Juntas"},"geometry":{"type":"Polygon","coordinates":[[[-96.69927,17.01798],[-96.69561,17.01591],[-96.66286,17.00532],[-96.65561,16.98616],[-96.65091,16.97781],[-96.6549,16.9773],[-96.65937,16.975],[-96.69759,16.975],[-96.70608,16.98285],[-96.7073,16.98262],[-96.70836,16.98965],[-96.70996,16.98983],[-96.71084,16.99144],[-96.71136,16.99393],[-96.71111,16.99861],[-96.71318,16.99863],[-96.71319,16.99831],[-96.71614,16.99849],[-96.7154,16.99886],[-96.71751,16.99887],[-96.71728,17.00001],[-96.71831,17.00003],[-96.71827,17.00047],[-96.71862,17.0005],[-96.71832,17.00165],[-96.71696,17.00153],[-96.71687,17.003],[-96.71869,17.00758],[-96.71867,17.00834],[-96.71568,17.01093],[-96.71564,17.01218],[-96.71451,17.01349],[-96.71303,17.01804],[-96.71182,17.01793],[-96.71142,17.01739],[-96.70588,17.01515],[-96.70008,17.01372],[-96.69927,17.01798]]]}},{"type":"Feature","properties":{"n":"San Andrés Ixtlahuaca"},"geometry":{"type":"Polygon","coordinates":[[[-96.82866,17.08909],[-96.81843,17.07795],[-96.81524,17.07724],[-96.81378,17.07745],[-96.81399,17.07227],[-96.81351,17.07055],[-96.81597,17.07109],[-96.81939,17.07015],[-96.82138,17.07042],[-96.82305,17.07],[-96.82438,17.06889],[-96.82502,17.06714],[-96.82744,17.06603],[-96.83,17.06346],[-96.83,17.09149],[-96.82866,17.08909]]]}},{"type":"Feature","properties":{"n":"San Agustín Yatareni"},"geometry":{"type":"Polygon","coordinates":[[[-96.69239,17.09356],[-96.68964,17.09223],[-96.68799,17.09073],[-96.68834,17.08707],[-96.68363,17.08588],[-96.68331,17.08638],[-96.6827,17.08638],[-96.6827,17.08715],[-96.67371,17.08881],[-96.67337,17.08923],[-96.66082,17.09034],[-96.66028,17.08926],[-96.66175,17.08156],[-96.66142,17.08141],[-96.66305,17.07528],[-96.67492,17.07401],[-96.68134,17.07443],[-96.68499,17.07408],[-96.68544,17.06725],[-96.69027,17.06853],[-96.69601,17.06899],[-96.69474,17.07797],[-96.69388,17.0794],[-96.69589,17.0817],[-96.69428,17.08164],[-96.69403,17.08368],[-96.69428,17.08371],[-96.69382,17.08659],[-96.69341,17.0871],[-96.69296,17.09242],[-96.69239,17.09356]]]}},{"type":"Feature","properties":{"n":"San Andrés Huayápam"},"geometry":{"type":"Polygon","coordinates":[[[-96.65023,17.15],[-96.65041,17.14173],[-96.65099,17.13278],[-96.65452,17.11523],[-96.65449,17.10453],[-96.65511,17.09379],[-96.66082,17.09034],[-96.67337,17.08923],[-96.67371,17.08881],[-96.6827,17.08715],[-96.6827,17.08638],[-96.68331,17.08638],[-96.68344,17.08588],[-96.68834,17.08707],[-96.68798,17.0907],[-96.68841,17.09643],[-96.6873,17.10175],[-96.68651,17.1001],[-96.6858,17.09983],[-96.68292,17.12031],[-96.6839,17.12442],[-96.67692,17.15],[-96.65023,17.15]]]}},{"type":"Feature","properties":{"n":"San Antonio de la Cal"},"geometry":{"type":"Polygon","coordinates":[[[-96.70453,17.05066],[-96.70124,17.04989],[-96.70218,17.04041],[-96.69761,17.03899],[-96.68789,17.03437],[-96.66684,17.02125],[-96.6677,17.01943],[-96.66753,17.01806],[-96.66959,17.01569],[-96.66941,17.0123],[-96.66847,17.01051],[-96.66632,17.0093],[-96.66326,17.00961],[-96.66454,17.00692],[-96.66286,17.00532],[-96.69561,17.01591],[-96.69946,17.0181],[-96.70008,17.01372],[-96.70588,17.01515],[-96.71142,17.01739],[-96.71182,17.01793],[-96.71303,17.01804],[-96.71297,17.01841],[-96.71405,17.019],[-96.71407,17.02044],[-96.71616,17.02313],[-96.7161,17.02499],[-96.71298,17.02859],[-96.71274,17.03101],[-96.7121,17.03097],[-96.71391,17.03347],[-96.70817,17.03218],[-96.70833,17.03132],[-96.70798,17.0311],[-96.70702,17.03295],[-96.7064,17.03285],[-96.70612,17.03343],[-96.70471,17.0337],[-96.70484,17.03462],[-96.70441,17.03462],[-96.70422,17.03541],[-96.70391,17.03528],[-96.70332,17.03835],[-96.70226,17.03965],[-96.7024,17.04054],[-96.70673,17.0424],[-96.70586,17.04842],[-96.70453,17.05066]]]}},{"type":"Feature","properties":{"n":"San Bartolo Coyotepec"},"geometry":{"type":"Polygon","coordinates":[[[-96.6549,16.9773],[-96.65644,16.975],[-96.65937,16.975],[-96.6549,16.9773]]]}},{"type":"Feature","properties":{"n":"San Felipe Tejalápam"},"geometry":{"type":"Polygon","coordinates":[[[-96.82979,17.14376],[-96.82649,17.14694],[-96.82256,17.13238],[-96.8245,17.12805],[-96.82209,17.12492],[-96.8236,17.12229],[-96.82574,17.11364],[-96.82702,17.11097],[-96.82814,17.10695],[-96.82991,17.10268],[-96.83,17.10153],[-96.82979,17.14376]]]}},{"type":"Feature","properties":{"n":"San Francisco Lachigoló"},"geometry":{"type":"Polygon","coordinates":[[[-96.59601,17.04803],[-96.59,17.04467],[-96.59,17.01162],[-96.59163,17.01049],[-96.59124,17.01037],[-96.59149,17.0093],[-96.59214,17.00947],[-96.59368,17.00717],[-96.59499,17.00645],[-96.59855,17.00675],[-96.60532,17.00865],[-96.60597,17.00949],[-96.6121,17.01113],[-96.61331,17.01079],[-96.61385,17.01102],[-96.61244,17.01388],[-96.60848,17.01823],[-96.60902,17.01812],[-96.60707,17.02584],[-96.61232,17.02698],[-96.60927,17.03971],[-96.60501,17.04133],[-96.60211,17.04169],[-96.59828,17.04318],[-96.59601,17.04803]]]}},{"type":"Feature","properties":{"n":"San Jacinto Amilpas"},"geometry":{"type":"Polygon","coordinates":[[[-96.7616,17.11404],[-96.75756,17.10961],[-96.75608,17.11014],[-96.75575,17.10928],[-96.75524,17.10941],[-96.75181,17.10158],[-96.75233,17.10068],[-96.75333,17.10064],[-96.75237,17.09737],[-96.7532,17.09668],[-96.75339,17.09406],[-96.7543,17.09363],[-96.7533,17.09196],[-96.75455,17.09131],[-96.74705,17.07848],[-96.74777,17.07815],[-96.74488,17.07323],[-96.74688,17.07287],[-96.74757,17.0747],[-96.74826,17.07872],[-96.75067,17.07678],[-96.75388,17.07529],[-96.75769,17.07951],[-96.7607,17.08486],[-96.75853,17.08639],[-96.76016,17.0898],[-96.76476,17.10231],[-96.76732,17.10465],[-96.76548,17.10468],[-96.76656,17.10604],[-96.76609,17.10643],[-96.76538,17.10603],[-96.76541,17.1066],[-96.7669,17.11057],[-96.766,17.11287],[-96.7616,17.11404]]]}},{"type":"Feature","properties":{"n":"Ánimas Trujano"},"geometry":{"type":"Polygon","coordinates":[[[-96.71827,17.00047],[-96.71831,17.00003],[-96.71728,17.00001],[-96.71751,16.99887],[-96.7154,16.99886],[-96.71614,16.99849],[-96.71319,16.99831],[-96.71318,16.99863],[-96.71111,16.99861],[-96.71136,16.99393],[-96.71084,16.99144],[-96.70996,16.98983],[-96.70836,16.98965],[-96.7073,16.98262],[-96.71444,16.97946],[-96.7157,16.97618],[-96.71695,16.97633],[-96.7173,16.97588],[-96.72019,16.97688],[-96.72041,16.97921],[-96.7252,16.98013],[-96.72543,16.98133],[-96.72516,16.98331],[-96.72454,16.9842],[-96.72334,16.98486],[-96.71862,17.0005],[-96.71827,17.00047]]]}},{"type":"Feature","properties":{"n":"Santa Cruz Papalutla"},"geometry":{"type":"Polygon","coordinates":[[[-96.59378,16.97767],[-96.59,16.97656],[-96.59,16.975],[-96.5947,16.975],[-96.59378,16.97767]]]}},{"type":"Feature","properties":{"n":"San Raymundo Jalpan"},"geometry":{"type":"Polygon","coordinates":[[[-96.76377,16.99905],[-96.76271,16.99724],[-96.73983,16.99672],[-96.74082,16.99192],[-96.74147,16.99196],[-96.74518,16.98199],[-96.74658,16.975],[-96.76344,16.975],[-96.76263,16.97933],[-96.77253,16.9838],[-96.76277,16.99424],[-96.76468,16.99457],[-96.76461,16.99517],[-96.76534,16.9952],[-96.76514,16.99663],[-96.76681,16.9967],[-96.76669,16.99744],[-96.76406,16.99732],[-96.76377,16.99905]]]}},{"type":"Feature","properties":{"n":"San Sebastián Abasolo"},"geometry":{"type":"MultiPolygon","coordinates":[[[[-96.59407,17.00681],[-96.59511,17.0031],[-96.59237,17.00224],[-96.59117,17.00634],[-96.59,17.00595],[-96.59,16.97656],[-96.594,16.97774],[-96.5947,16.975],[-96.60402,16.975],[-96.60191,16.98236],[-96.60256,16.98255],[-96.60224,16.98369],[-96.60012,16.98313],[-96.59888,16.98681],[-96.6025,16.9879],[-96.60251,16.99049],[-96.60692,16.9944],[-96.60542,16.99897],[-96.60196,16.99811],[-96.5999,17.00441],[-96.60134,17.0049],[-96.60122,17.00526],[-96.59942,17.0047],[-96.59855,17.00675],[-96.59499,17.00645],[-96.59407,17.00681]]],[[[-96.62601,16.975],[-96.64485,16.97755],[-96.65091,16.97781],[-96.65561,16.98616],[-96.62599,16.98755],[-96.62579,16.98012],[-96.61131,16.97936],[-96.61078,16.98349],[-96.60609,16.98181],[-96.60641,16.98097],[-96.60789,16.98112],[-96.60634,16.975],[-96.62601,16.975]]]]}},{"type":"Feature","properties":{"n":"Soledad Etla"},"geometry":{"type":"MultiPolygon","coordinates":[[[[-96.80716,17.15],[-96.80317,17.14386],[-96.80642,17.14452],[-96.81103,17.1409],[-96.81258,17.1461],[-96.80925,17.14821],[-96.80925,17.1494],[-96.8086,17.14928],[-96.80886,17.15],[-96.80716,17.15]]],[[[-96.81317,17.14972],[-96.82649,17.14694],[-96.83,17.14373],[-96.83,17.15],[-96.8131,17.15],[-96.81317,17.14972]]]]}},{"type":"Feature","properties":{"n":"San Sebastián Teitipac"},"geometry":{"type":"Polygon","coordinates":[[[-96.64485,16.97755],[-96.62601,16.975],[-96.65644,16.975],[-96.6549,16.9773],[-96.65091,16.97781],[-96.64485,16.97755]]]}},{"type":"Feature","properties":{"n":"San Sebastián Tutla"},"geometry":{"type":"MultiPolygon","coordinates":[[[[-96.69342,17.05397],[-96.69027,17.04949],[-96.68802,17.04811],[-96.68654,17.04797],[-96.68716,17.04508],[-96.69044,17.03562],[-96.69761,17.03899],[-96.70218,17.04041],[-96.70181,17.04469],[-96.69621,17.04337],[-96.69342,17.05397]]],[[[-96.67196,17.06409],[-96.67223,17.06308],[-96.67008,17.06247],[-96.67031,17.06175],[-96.66341,17.06055],[-96.66361,17.05936],[-96.66544,17.05855],[-96.66665,17.0567],[-96.66944,17.05544],[-96.67124,17.0517],[-96.67277,17.05059],[-96.6734,17.04858],[-96.66871,17.03073],[-96.66684,17.02125],[-96.68346,17.03156],[-96.68237,17.04908],[-96.67869,17.06132],[-96.67947,17.06151],[-96.67908,17.06289],[-96.68376,17.06369],[-96.68417,17.0611],[-96.68498,17.0592],[-96.68735,17.05952],[-96.68725,17.06147],[-96.68546,17.06743],[-96.67196,17.06409]]]]}},{"type":"Feature","properties":{"n":"Santa Catarina Ixtepeji"},"geometry":{"type":"Polygon","coordinates":[[[-96.59222,17.12171],[-96.5978,17.1174],[-96.60724,17.11922],[-96.61184,17.12868],[-96.61824,17.13383],[-96.6222,17.14221],[-96.62249,17.1449],[-96.63004,17.13929],[-96.63633,17.13553],[-96.64273,17.14411],[-96.65054,17.14575],[-96.65023,17.15],[-96.59,17.15],[-96.59,17.12213],[-96.59222,17.12171]]]}},{"type":"Feature","properties":{"n":"San Pablo Etla"},"geometry":{"type":"Polygon","coordinates":[[[-96.73055,17.14791],[-96.73728,17.14376],[-96.73994,17.14434],[-96.74231,17.14542],[-96.74429,17.14497],[-96.74762,17.13821],[-96.74987,17.13777],[-96.75744,17.13513],[-96.76125,17.13324],[-96.76574,17.13325],[-96.77132,17.13111],[-96.76712,17.12593],[-96.76833,17.12562],[-96.76803,17.12523],[-96.77812,17.12252],[-96.77844,17.12489],[-96.7779,17.12555],[-96.77337,17.12667],[-96.7801,17.13418],[-96.77768,17.13731],[-96.78203,17.14138],[-96.78175,17.14436],[-96.77786,17.14462],[-96.77547,17.13911],[-96.76935,17.14095],[-96.77194,17.1487],[-96.77811,17.14851],[-96.77815,17.15],[-96.72534,17.15],[-96.73055,17.14791]]]}},{"type":"Feature","properties":{"n":"Santa Cruz Amilpas"},"geometry":{"type":"Polygon","coordinates":[[[-96.68376,17.06369],[-96.67908,17.06289],[-96.67947,17.06151],[-96.67869,17.06132],[-96.68237,17.04908],[-96.68346,17.03156],[-96.69044,17.03562],[-96.68716,17.04508],[-96.68654,17.04797],[-96.68802,17.04811],[-96.69,17.04926],[-96.6931,17.05388],[-96.69353,17.054],[-96.69336,17.05454],[-96.68895,17.0527],[-96.68845,17.05279],[-96.68652,17.05931],[-96.68498,17.0592],[-96.68417,17.0611],[-96.68376,17.06369]]]}},{"type":"Feature","properties":{"n":"Santa Lucía del Camino"},"geometry":{"type":"MultiPolygon","coordinates":[[[[-96.66305,17.07528],[-96.66393,17.07153],[-96.66343,17.07149],[-96.6635,17.06955],[-96.66107,17.06896],[-96.66204,17.06451],[-96.66386,17.06065],[-96.67031,17.06175],[-96.67008,17.06247],[-96.67223,17.06308],[-96.67196,17.06409],[-96.68546,17.06743],[-96.68499,17.07408],[-96.68134,17.07443],[-96.67492,17.07401],[-96.66305,17.07528]]],[[[-96.70497,17.08209],[-96.69589,17.0817],[-96.69388,17.0794],[-96.69474,17.07797],[-96.69601,17.06899],[-96.69027,17.06853],[-96.68542,17.067],[-96.68725,17.06147],[-96.68735,17.05952],[-96.68652,17.05931],[-96.68811,17.05336],[-96.68895,17.0527],[-96.69336,17.05454],[-96.69621,17.04337],[-96.70181,17.04469],[-96.70124,17.04989],[-96.70395,17.0504],[-96.70548,17.05131],[-96.70959,17.05747],[-96.71019,17.06216],[-96.7095,17.06237],[-96.70965,17.06289],[-96.71055,17.06263],[-96.71069,17.06305],[-96.71018,17.06323],[-96.71033,17.06617],[-96.70737,17.06659],[-96.70763,17.06975],[-96.70722,17.07269],[-96.70595,17.07256],[-96.70614,17.07395],[-96.70647,17.07398],[-96.70595,17.07469],[-96.70639,17.08182],[-96.70498,17.08177],[-96.70497,17.08209]]]]}},{"type":"Feature","properties":{"n":"Santa María Atzompa"},"geometry":{"type":"Polygon","coordinates":[[[-96.78234,17.12836],[-96.78205,17.12661],[-96.78038,17.12352],[-96.77828,17.1237],[-96.7782,17.12278],[-96.7803,17.12264],[-96.78049,17.12178],[-96.77765,17.11914],[-96.77381,17.11668],[-96.77307,17.11478],[-96.77337,17.11342],[-96.77305,17.11237],[-96.77173,17.11247],[-96.76917,17.11351],[-96.76638,17.11205],[-96.7669,17.11057],[-96.76538,17.10603],[-96.76609,17.10643],[-96.76656,17.10604],[-96.76548,17.10468],[-96.76732,17.10465],[-96.76476,17.10231],[-96.76016,17.0898],[-96.75853,17.08639],[-96.7607,17.08486],[-96.75773,17.07957],[-96.76362,17.07634],[-96.76615,17.07559],[-96.76736,17.07478],[-96.7683,17.07345],[-96.76465,17.06009],[-96.77324,17.05859],[-96.77359,17.04887],[-96.76992,17.04429],[-96.76983,17.0417],[-96.77404,17.04571],[-96.77459,17.04526],[-96.78298,17.05055],[-96.78243,17.05216],[-96.78369,17.05309],[-96.78966,17.06661],[-96.79095,17.06617],[-96.79048,17.06524],[-96.79267,17.06597],[-96.79859,17.06531],[-96.79911,17.07097],[-96.80032,17.07537],[-96.79971,17.07684],[-96.79962,17.0789],[-96.80109,17.08086],[-96.8011,17.08185],[-96.8023,17.08201],[-96.80645,17.07733],[-96.80882,17.07724],[-96.81079,17.07662],[-96.81094,17.07415],[-96.81397,17.07192],[-96.81378,17.07745],[-96.81524,17.07724],[-96.81843,17.07795],[-96.82886,17.08907],[-96.80978,17.09055],[-96.81656,17.09821],[-96.81009,17.10357],[-96.80322,17.10644],[-96.79792,17.10735],[-96.7969,17.10693],[-96.79409,17.10706],[-96.79051,17.10549],[-96.78722,17.10497],[-96.78657,17.10773],[-96.79254,17.11118],[-96.79539,17.11215],[-96.79732,17.11228],[-96.80016,17.11709],[-96.79451,17.11724],[-96.79601,17.1191],[-96.79311,17.11895],[-96.79186,17.11935],[-96.79285,17.12066],[-96.79241,17.122],[-96.7928,17.12364],[-96.79213,17.12598],[-96.78719,17.12595],[-96.78325,17.12661],[-96.78373,17.12821],[-96.78234,17.12836]]]}},{"type":"Feature","properties":{"n":"Santa María Coyotepec"},"geometry":{"type":"Polygon","coordinates":[[[-96.70608,16.98285],[-96.69759,16.975],[-96.72686,16.975],[-96.7252,16.98013],[-96.72041,16.97921],[-96.72019,16.97688],[-96.7173,16.97588],[-96.71695,16.97633],[-96.7157,16.97618],[-96.71444,16.97946],[-96.70667,16.98298],[-96.70608,16.98285]]]}},{"type":"Feature","properties":{"n":"Santa María del Tule"},"geometry":{"type":"Polygon","coordinates":[[[-96.62732,17.05442],[-96.62233,17.05292],[-96.6235,17.04868],[-96.62562,17.04933],[-96.62398,17.04713],[-96.62451,17.04581],[-96.62053,17.04513],[-96.6146,17.04328],[-96.60927,17.03971],[-96.61232,17.02698],[-96.60707,17.02584],[-96.60832,17.02092],[-96.60903,17.02161],[-96.61228,17.02311],[-96.61365,17.02334],[-96.61526,17.02456],[-96.62173,17.0194],[-96.622,17.01696],[-96.6245,17.01754],[-96.64467,17.00728],[-96.6482,17.00763],[-96.65547,17.0069],[-96.66326,17.00961],[-96.64293,17.04145],[-96.64241,17.04344],[-96.64309,17.04366],[-96.64192,17.04887],[-96.64022,17.05315],[-96.63976,17.05293],[-96.63926,17.05416],[-96.63077,17.05173],[-96.62732,17.05442]]]}},{"type":"Feature","properties":{"n":"Santa María Guelacé"},"geometry":{"type":"Polygon","coordinates":[[[-96.6121,17.01113],[-96.60597,17.00949],[-96.60532,17.00865],[-96.59855,17.00675],[-96.59942,17.0047],[-96.60122,17.00526],[-96.60134,17.0049],[-96.5999,17.00441],[-96.60196,16.99811],[-96.60542,16.99897],[-96.60692,16.9944],[-96.60251,16.99049],[-96.6025,16.9879],[-96.59888,16.98681],[-96.60012,16.98313],[-96.60224,16.98369],[-96.60256,16.98255],[-96.60191,16.98236],[-96.60402,16.975],[-96.60634,16.975],[-96.60789,16.98112],[-96.60641,16.98097],[-96.60609,16.98181],[-96.61078,16.98349],[-96.61131,16.97936],[-96.62579,16.98012],[-96.62599,16.98755],[-96.62517,16.99986],[-96.62463,17.0029],[-96.6154,17.00098],[-96.61449,17.00325],[-96.61483,17.00546],[-96.61532,17.00624],[-96.61511,17.00737],[-96.61337,17.0081],[-96.61377,17.00899],[-96.61331,17.01079],[-96.6121,17.01113]]]}},{"type":"Feature","properties":{"n":"Santa Cruz Xoxocotlán"},"geometry":{"type":"Polygon","coordinates":[[[-96.76375,17.04508],[-96.74879,17.04483],[-96.74811,17.04541],[-96.74767,17.04849],[-96.74603,17.04849],[-96.74343,17.04754],[-96.74048,17.0475],[-96.73585,17.04549],[-96.73102,17.04528],[-96.73168,17.04628],[-96.72955,17.04599],[-96.7287,17.04698],[-96.72318,17.04637],[-96.71501,17.03502],[-96.71811,17.03527],[-96.71782,17.03291],[-96.71899,17.0316],[-96.71603,17.03016],[-96.71559,17.02954],[-96.71287,17.0293],[-96.71364,17.02763],[-96.7161,17.02499],[-96.71616,17.02313],[-96.71407,17.02044],[-96.71405,17.019],[-96.71297,17.01841],[-96.71306,17.01778],[-96.71451,17.01349],[-96.71564,17.01218],[-96.71568,17.01093],[-96.71867,17.00834],[-96.71869,17.00758],[-96.71694,17.00338],[-96.71696,17.00153],[-96.71832,17.00165],[-96.72334,16.98486],[-96.72454,16.9842],[-96.72516,16.98331],[-96.72543,16.98133],[-96.72519,16.98015],[-96.72686,16.975],[-96.74658,16.975],[-96.74518,16.98199],[-96.74147,16.99196],[-96.74082,16.99192],[-96.73983,16.99672],[-96.76271,16.99724],[-96.76181,17.00355],[-96.7619,17.00599],[-96.76141,17.00786],[-96.75903,17.00753],[-96.75697,17.01381],[-96.75634,17.0135],[-96.75552,17.01413],[-96.75604,17.01519],[-96.75686,17.01583],[-96.76814,17.0175],[-96.76826,17.01674],[-96.77698,17.01562],[-96.77357,17.01978],[-96.77578,17.01748],[-96.77661,17.01839],[-96.78145,17.01895],[-96.78398,17.02139],[-96.79759,17.02772],[-96.78972,17.03],[-96.78843,17.03337],[-96.79439,17.03387],[-96.80697,17.04416],[-96.79672,17.04229],[-96.78312,17.0411],[-96.77978,17.0346],[-96.77638,17.03512],[-96.76983,17.0417],[-96.76992,17.04429],[-96.7729,17.04801],[-96.77092,17.04954],[-96.76887,17.04984],[-96.76503,17.04965],[-96.76465,17.05422],[-96.76361,17.0506],[-96.76375,17.04508]]]}},{"type":"Feature","properties":{"n":"Cuilápam de Guerrero"},"geometry":{"type":"Polygon","coordinates":[[[-96.82993,17.04879],[-96.82674,17.04669],[-96.82418,17.0418],[-96.81161,17.04107],[-96.80697,17.04416],[-96.79439,17.03387],[-96.78843,17.03337],[-96.78972,17.03],[-96.79759,17.02772],[-96.78398,17.02139],[-96.78145,17.01895],[-96.77661,17.01839],[-96.77578,17.01748],[-96.77357,17.01978],[-96.77698,17.01562],[-96.76826,17.01674],[-96.76814,17.0175],[-96.75686,17.01583],[-96.75604,17.01519],[-96.75552,17.01413],[-96.75634,17.0135],[-96.75697,17.01381],[-96.75903,17.00753],[-96.76141,17.00786],[-96.76283,16.99747],[-96.76377,16.99905],[-96.76406,16.99732],[-96.76669,16.99744],[-96.76681,16.9967],[-96.76514,16.99663],[-96.76534,16.9952],[-96.76461,16.99517],[-96.76468,16.99457],[-96.76277,16.99424],[-96.77253,16.9838],[-96.76263,16.97933],[-96.76327,16.97512],[-96.79826,16.975],[-96.81072,16.97631],[-96.81134,16.98463],[-96.81028,16.99613],[-96.81221,17.0031],[-96.81433,17.0064],[-96.81651,17.00816],[-96.81751,17.00854],[-96.81883,17.00988],[-96.81762,17.0098],[-96.82102,17.01247],[-96.8241,17.02108],[-96.83,17.01658],[-96.82993,17.04879]]]}},{"type":"Feature","properties":{"n":"San Pedro Ixtlahuaca"},"geometry":{"type":"Polygon","coordinates":[[[-96.8011,17.08185],[-96.80067,17.08011],[-96.79962,17.0789],[-96.79971,17.07684],[-96.80032,17.07537],[-96.79911,17.07097],[-96.79859,17.06531],[-96.79267,17.06597],[-96.79048,17.06524],[-96.79095,17.06617],[-96.78966,17.06661],[-96.78369,17.05309],[-96.78243,17.05216],[-96.78298,17.05055],[-96.77459,17.04526],[-96.77404,17.04571],[-96.76983,17.0417],[-96.77638,17.03512],[-96.77978,17.0346],[-96.78312,17.0411],[-96.79672,17.04229],[-96.80697,17.04416],[-96.81161,17.04107],[-96.82418,17.0418],[-96.82674,17.04669],[-96.83,17.04884],[-96.82975,17.06384],[-96.82935,17.06381],[-96.82744,17.06603],[-96.82502,17.06714],[-96.82438,17.06889],[-96.82305,17.07],[-96.82138,17.07042],[-96.81939,17.07015],[-96.81597,17.07109],[-96.81351,17.07055],[-96.81353,17.0714],[-96.81397,17.07192],[-96.81094,17.07415],[-96.81079,17.07662],[-96.80882,17.07724],[-96.80645,17.07733],[-96.8023,17.08201],[-96.8011,17.08185]]]}},{"type":"Feature","properties":{"n":"Oaxaca de Juárez"},"geometry":{"type":"Polygon","coordinates":[[[-96.67692,17.15],[-96.6839,17.12442],[-96.68292,17.12031],[-96.6858,17.09983],[-96.68651,17.1001],[-96.6873,17.10175],[-96.68841,17.09643],[-96.68799,17.09073],[-96.68964,17.09223],[-96.69239,17.09356],[-96.69305,17.09198],[-96.69428,17.08164],[-96.70497,17.08209],[-96.70498,17.08177],[-96.70639,17.08182],[-96.70595,17.07469],[-96.70647,17.07398],[-96.70614,17.07395],[-96.70595,17.07256],[-96.70722,17.07269],[-96.70763,17.06975],[-96.70737,17.06659],[-96.71033,17.06617],[-96.71018,17.06323],[-96.71069,17.06305],[-96.71055,17.06263],[-96.70965,17.06289],[-96.7095,17.06237],[-96.71019,17.06216],[-96.70959,17.05747],[-96.70548,17.05131],[-96.70453,17.05066],[-96.70599,17.04795],[-96.70673,17.0424],[-96.7024,17.04054],[-96.70226,17.03965],[-96.70332,17.03835],[-96.70391,17.03528],[-96.70422,17.03541],[-96.70441,17.03462],[-96.70484,17.03462],[-96.70471,17.0337],[-96.70612,17.03343],[-96.7064,17.03285],[-96.70702,17.03295],[-96.70798,17.0311],[-96.70833,17.03132],[-96.70817,17.03218],[-96.71391,17.03347],[-96.7121,17.03097],[-96.71274,17.03101],[-96.71287,17.0293],[-96.71559,17.02954],[-96.71603,17.03016],[-96.71899,17.0316],[-96.71782,17.03291],[-96.71811,17.03527],[-96.71501,17.03502],[-96.72318,17.04637],[-96.7287,17.04698],[-96.72955,17.04599],[-96.73168,17.04628],[-96.73102,17.04528],[-96.73585,17.04549],[-96.74048,17.0475],[-96.74343,17.04754],[-96.74603,17.04849],[-96.74767,17.04849],[-96.74811,17.04541],[-96.74879,17.04483],[-96.76375,17.04508],[-96.76361,17.0506],[-96.76465,17.05422],[-96.76503,17.04965],[-96.76887,17.04984],[-96.77092,17.04954],[-96.7729,17.04801],[-96.77359,17.04887],[-96.77324,17.05859],[-96.76465,17.06009],[-96.7683,17.07345],[-96.76736,17.07478],[-96.76584,17.07574],[-96.76362,17.07634],[-96.75773,17.07957],[-96.75388,17.07529],[-96.75067,17.07678],[-96.74826,17.07872],[-96.74757,17.0747],[-96.74688,17.07287],[-96.74488,17.07323],[-96.74777,17.07815],[-96.74705,17.07848],[-96.75455,17.09131],[-96.7533,17.09196],[-96.7543,17.09363],[-96.75339,17.09406],[-96.7532,17.09668],[-96.75237,17.09737],[-96.75333,17.10064],[-96.75233,17.10068],[-96.75181,17.10158],[-96.75524,17.10941],[-96.75575,17.10928],[-96.75608,17.11014],[-96.75756,17.10961],[-96.7616,17.11404],[-96.766,17.11287],[-96.76593,17.11238],[-96.76638,17.11205],[-96.76917,17.11351],[-96.77173,17.11247],[-96.77305,17.11237],[-96.77337,17.11342],[-96.77307,17.11478],[-96.77381,17.11668],[-96.77942,17.12064],[-96.78049,17.12178],[-96.7803,17.12264],[-96.77773,17.12259],[-96.76803,17.12523],[-96.76833,17.12562],[-96.76712,17.12593],[-96.77132,17.13111],[-96.76574,17.13325],[-96.76125,17.13324],[-96.75744,17.13513],[-96.74987,17.13777],[-96.74762,17.13821],[-96.74429,17.14497],[-96.74231,17.14542],[-96.73994,17.14434],[-96.73728,17.14376],[-96.73055,17.14791],[-96.72534,17.15],[-96.67692,17.15]]]}}]},"labels":[{"n":"San Lorenzo Cacaotepec","lat":17.1276,"lng":-96.8087,"big":true},{"n":"Tlalixtac de Cabrera","lat":17.1018,"lng":-96.6277,"big":true},{"n":"Villa de Zaachila","lat":16.9955,"lng":-96.8202,"big":false},{"n":"Santo Domingo Tomaltepec","lat":17.0571,"lng":-96.6076,"big":false},{"n":"Rojas de Cuauhtémoc","lat":16.9985,"lng":-96.6366,"big":false},{"n":"San Agustín de las Juntas","lat":16.9941,"lng":-96.6898,"big":true},{"n":"San Agustín Yatareni","lat":17.0821,"lng":-96.6698,"big":false},{"n":"San Andrés Huayápam","lat":17.1247,"lng":-96.6681,"big":true},{"n":"San Antonio de la Cal","lat":17.0276,"lng":-96.6966,"big":false},{"n":"San Francisco Lachigoló","lat":17.0321,"lng":-96.5997,"big":false},{"n":"San Jacinto Amilpas","lat":17.1034,"lng":-96.759,"big":false},{"n":"San Sebastián Abasolo","lat":16.9815,"lng":-96.6318,"big":false},{"n":"San Sebastián Tutla","lat":17.0351,"lng":-96.6766,"big":false},{"n":"Santa Catarina Ixtepeji","lat":17.1372,"lng":-96.6025,"big":false},{"n":"San Pablo Etla","lat":17.142,"lng":-96.7612,"big":false},{"n":"Santa Lucía del Camino","lat":17.0603,"lng":-96.7005,"big":false},{"n":"Santa María Atzompa","lat":17.0867,"lng":-96.7821,"big":true},{"n":"Santa María del Tule","lat":17.0318,"lng":-96.6306,"big":false},{"n":"Santa María Guelacé","lat":16.9914,"lng":-96.6162,"big":false},{"n":"Santa Cruz Xoxocotlán","lat":17.0253,"lng":-96.7382,"big":true},{"n":"Cuilápam de Guerrero","lat":16.9976,"lng":-96.789,"big":true},{"n":"San Pedro Ixtlahuaca","lat":17.0562,"lng":-96.8152,"big":false},{"n":"Oaxaca de Juárez","lat":17.1144,"lng":-96.7195,"big":true}],"roads":{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"n":"175"},"geometry":{"type":"LineString","coordinates":[[-96.69583,16.975],[-96.69708,16.98958],[-96.73528,17.06252]]}},{"type":"Feature","properties":{"n":"190"},"geometry":{"type":"LineString","coordinates":[[-96.69708,17.05731],[-96.66408,17.05904],[-96.59,17.02247]]}},{"type":"Feature","properties":{"n":"135D"},"geometry":{"type":"LineString","coordinates":[[-96.69708,17.06946],[-96.71444,17.06946],[-96.72834,17.07294],[-96.75612,17.1094],[-96.77522,17.12677],[-96.78043,17.14066],[-96.78043,17.15]]}},{"type":"Feature","properties":{"n":"175"},"geometry":{"type":"LineString","coordinates":[[-96.69708,17.05731],[-96.66061,17.08162],[-96.64498,17.10419],[-96.62588,17.11982],[-96.61582,17.15]]}}]},"urban":{"type":"FeatureCollection","features":[{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[-96.69925,17.11933],[-96.69872,17.1175],[-96.67657,17.10621],[-96.67583,17.10147],[-96.67771,17.0882],[-96.67658,17.08406],[-96.66552,17.08405],[-96.66825,17.07594],[-96.67595,17.06689],[-96.71778,17.04089],[-96.73066,17.03754],[-96.74326,17.03955],[-96.74713,17.04359],[-96.75446,17.0618],[-96.7581,17.06471],[-96.76091,17.06533],[-96.76324,17.06702],[-96.76552,17.07289],[-96.76552,17.12855],[-96.753,17.12596],[-96.71274,17.13289],[-96.69872,17.12855],[-96.69847,17.12625],[-96.69925,17.11933]]]}}]},"shields":[{"n":"190","lat":17.059,"lng":-96.6641},{"n":"175","lat":17.0625,"lng":-96.7353},{"n":"135D","lat":17.0695,"lng":-96.6971}]};
+var SRC = "https://www.realestateoaxaca.com/";
+var PC = "https://propiedades.com/inmuebles/";
+var SOURCES = {reo:"Real Estate Oaxaca", pc:"Propiedades.com"};
+var ZOCALO = [17.0607, -96.7254];
+
+var LISTINGS = [
+  {n:1, id:"studio-reforma", title:"Modern studio apartment", area:"Colonia Reforma", price:9000, cur:"MXN", beds:1, bedsLabel:"Studio", baths:1, status:"available",
+   near:"Quiet privada 10 flat blocks from the Centro Histórico and 4 blocks from a Chedraui supermarket. For 1 person, or 2 on a short stay.",
+   tags:["Furnished","40 m²","Water, power and internet included","Weekly cleaning","Shared laundry"],
+   note:"The listing's own page shows $8,000 MXN and “occupied”, while the rentals index shows $9,000 with no lease note. Ask which is current.",
+   url:SRC+"rentals-casareforma-studio.html", ll:[17.0757,-96.7166], prec:400, q:"Colonia Reforma, Oaxaca de Juárez, Oaxaca"},
+  {n:2, id:"casa-volcanes", title:"Spacious 4-bedroom house", area:"Colonia Volcanes", price:30000, cur:"MXN", beds:4, baths:3, status:"available",
+   near:"One block from San Felipe del Agua, close to shops and main roads; about 20 minutes to downtown.",
+   tags:["3 levels","Roof terrace with mountain views","Parking for 3","10,000 L cistern","Utilities paid by tenant"],
+   url:SRC+"casa-renta-volcanes.html", ll:[17.0890,-96.7155], prec:500, q:"Colonia Volcanes, Oaxaca de Juárez, Oaxaca"},
+  {n:3, id:"avila-camacho", title:"Charming 2-bedroom home", area:"Colonia Postal", price:25000, cur:"MXN", beds:2, baths:1.5, status:"leased",
+   near:"Very quiet gated street about 10 blocks, or a 15-minute walk, from the Zócalo.",
+   tags:["Furnished","Single level","Power, water, gas and internet included","Weekly cleaning","Patio"],
+   url:SRC+"avila-camacho.html", ll:[17.0668,-96.7118], prec:400, q:"Colonia Postal, Oaxaca de Juárez, Oaxaca"},
+  {n:4, id:"depa-oclaro", title:"3-bedroom apartment in a gated complex", area:"San Martín Mexicápam", price:20000, cur:"MXN", beds:3, baths:2, status:"available",
+   near:"Modern, secure complex near the road to Monte Albán; 15 minutes by car to downtown and to Plaza Bella.",
+   tags:["Partly furnished","Third floor","1 parking space","Power, water and internet included; gas extra","Washer-dryer"],
+   url:SRC+"depa-oclaro.html", ll:[17.0625,-96.7455], prec:800, q:"San Martín Mexicápam, Oaxaca de Juárez, Oaxaca"},
+  {n:5, id:"san-felipe-pool", title:"3-bedroom house with pool", area:"San Felipe del Agua", price:3520, cur:"USD", beds:3, baths:2, status:"available",
+   near:"Two floors in a small community of five houses that share a heatable pool shaded by trees.",
+   tags:["Furnished","Shared heatable pool","Private covered patio and yard","Utilities and internet included"],
+   url:SRC+"rental-san-felipe-pool.html", ll:[17.0990,-96.7055], prec:600, q:"San Felipe del Agua, Oaxaca"},
+  {n:6, id:"reforma-terrace", title:"Furnished terrace apartment", area:"Colonia Reforma", price:18000, cur:"MXN", beds:1, baths:1, status:"leased",
+   near:"Second-floor apartment 10 flat blocks from the Centro Histórico and 12 blocks from Parque El Llano.",
+   tags:["Furnished","100 m²","Kitchen and studio"],
+   url:SRC+"casareforma-rent-planta-alta.html", ll:[17.0757,-96.7166], prec:400, q:"Colonia Reforma, Oaxaca de Juárez, Oaxaca"},
+  {n:7, id:"tonatiuh", title:"Enchanting 3-bedroom home", area:"San Felipe del Agua", price:3850, cur:"USD", beds:3, baths:3.5, status:"available",
+   near:"Less than 100 m from Parque Colosio, inside a secure compound with a shared garden, pool and views.",
+   tags:["Fully furnished","Oaxacan materials and design","Shared garden and pool"],
+   url:SRC+"rentals-residential-tonatiuh20.html", ll:[17.0950,-96.7115], prec:500, q:"Parque Colosio, San Felipe del Agua, Oaxaca"},
+  {n:8, id:"san-felipe-loft", title:"Loft in a compound with pool", area:"San Felipe del Agua", price:1700, cur:"USD", beds:1, bedsLabel:"1-bed loft", baths:null, status:"available",
+   near:"One-bedroom loft in a quiet, green San Felipe del Agua compound with panoramic views and pool access.",
+   tags:["Fully furnished","Pool access","Panoramic views"],
+   url:SRC+"rentals-residential-sanfelipe20.html", ll:[17.1020,-96.7090], prec:700, q:"San Felipe del Agua, Oaxaca"},
+  {n:9, id:"reforma-garden", title:"Furnished garden apartment", area:"Colonia Reforma", price:23000, cur:"MXN", beds:2, baths:2, status:"leased",
+   near:"Ground-floor apartment 10 flat blocks from the Centro Histórico and 12 blocks from Parque El Llano.",
+   tags:["Furnished","Kitchenette and studio","Light-filled"],
+   url:SRC+"casareformaforrent.html", ll:[17.0757,-96.7166], prec:400, q:"Colonia Reforma, Oaxaca de Juárez, Oaxaca"},
+  {n:10, id:"adobe-campirana", title:"Adobe-finish country house", area:"Tlalixtac de Cabrera", price:31000, cur:"MXN", beds:5, baths:3, status:"available",
+   near:"Quiet private street near the Huayápam dams and the road to Ixtlán; about 20 minutes by car to downtown.",
+   tags:["Land 725 m²","Built 395 m²","Service room with bath","Large garden"],
+   url:SRC+"adobe-house-campirana.html", ll:[17.0800,-96.6480], prec:1200, q:"Tlalixtac de Cabrera, Oaxaca"},
+  {n:11, id:"tlalixtac-mexican", title:"Mexican-style house with garden", area:"Tlalixtac de Cabrera", price:20000, cur:"MXN", beds:3, baths:2, status:"available",
+   near:"Single-level house in a very quiet area close to the city, with a spacious garden and a small terrace.",
+   tags:["Single level","Land 1,117 m²","Built 300 m²","Garden and parking"],
+   url:SRC+"tlalixtac-mexican.html", ll:[17.0700,-96.6560], prec:1200, q:"Tlalixtac de Cabrera, Oaxaca"},
+  {n:12, id:"portal-de-hierro", title:"Modern house in Portal de Hierro", area:"Lomas del Jardín, Huayápam", price:30000, cur:"MXN", beds:3, baths:3.5, status:"leased",
+   near:"Gated Portal de Hierro Residencial near Panteón Jardín, with 24-hour security; about 20 minutes to downtown.",
+   tags:["Land 373 m²","Built 658 m²","Service quarters","Water included"],
+   note:"Also listed for sale at $11,500,000 MXN.",
+   url:SRC+"portal-de-hierro.html", ll:[17.0880,-96.6820], prec:900, q:"Portal de Hierro Residencial, San Andrés Huayápam, Oaxaca"},
+  {n:13, src:"pc", id:"pc-tinoco-410", title:"Furnished 3-bedroom house with terrace", area:"Centro · Tinoco y Palacios 410", price:25000, cur:"MXN", beds:3, baths:2, status:"available",
+   near:"Three-level house in the Centro Histórico with a full kitchen, a dining table for five and a home-office desk.",
+   tags:["Furnished","Terrace","Pets allowed","Built 250 m²","Land 180 m²","3 floors"],
+   url:PC+"casa-en-renta-calle-de-tinoco-y-palacios-410-ruta-independencia-centro-68000-oaxaca-de-juarez-oax-410-oaxaca-centro-oaxaca-31654201", ll:[17.0660,-96.7272], prec:300, by:"street", q:"Tinoco y Palacios 410, Centro, Oaxaca de Juárez, Oaxaca"},
+  {n:14, src:"pc", id:"pc-casa-pensativa", title:"Casa Pensativa, furnished 2-bedroom", area:"Colonia Reforma · Calle Sabinos", price:22000, cur:"MXN", beds:2, baths:2, status:"available",
+   near:"Furnished house set up for people working from home or staying a few months.",
+   tags:["Furnished","Air conditioning","1 parking space","Built 125 m²","Land 150 m²"],
+   note:"Outdoor space not confirmed. The lot is larger than the house, but the visible listing text doesn't mention a patio or garden. Listed under Oaxaca Centro, though the description places it in Reforma.",
+   url:PC+"casa-en-renta-sabinos-oaxaca-centro-oaxaca-31384001", ll:[17.0738,-96.7178], prec:600, by:"street", q:"Calle Sabinos, Colonia Reforma, Oaxaca de Juárez, Oaxaca"},
+  {n:15, src:"pc", id:"pc-santo-domingo", title:"Colonial 2-bedroom near Santo Domingo", area:"Centro Histórico", price:25000, cur:"MXN", beds:2, baths:2, status:"available",
+   near:"Colonial-style house with artisan finishes, two blocks from the Templo de Santo Domingo.",
+   tags:["Furnished","Built 100 m²","Land 120 m²"],
+   note:"No street given. Outdoor space isn't confirmed in the visible listing text.",
+   url:PC+"casa-en-renta-oaxaca-centro-oaxaca-30481879", ll:[17.0664,-96.7222], prec:300, by:"landmark", q:"Templo de Santo Domingo, Oaxaca de Juárez, Oaxaca"},
+  {n:16, src:"pc", id:"pc-casa-mate", title:"Casa Mate, renovated colonial house", area:"Centro · Calle Rufino Tamayo", price:10000, cur:"USD", beds:5, baths:5, status:"available",
+   near:"Recently renovated colonial house on a pedestrian street in the centro.",
+   tags:["Furnished","Air conditioning","CCTV","Built 406 m²","Land 395 m²"],
+   note:"Priced in US dollars. The street couldn't be placed exactly, so this pin is a rough spot in the centro. Outdoor space isn't confirmed in the visible listing text.",
+   url:PC+"casa-en-renta-rufino-tamayo-oaxaca-centro-oaxaca-31228075", ll:[17.0628,-96.7238], prec:800, by:"area", q:"Calle Rufino Tamayo, Oaxaca de Juárez, Oaxaca"},
+  {n:17, src:"pc", id:"pc-fortin-55", title:"Furnished ground-floor apartment", area:"Panorámica del Fortín 55", price:16000, cur:"MXN", beds:2, baths:1, status:"available",
+   near:"Ground-floor apartment, furnished and equipped, on the Panorámica del Fortín.",
+   tags:["Furnished","50 m²","Phone line","Cistern"],
+   note:"12-month minimum lease. No outdoor space listed.",
+   url:PC+"departamento-en-renta-panoramica-del-fortin-55-oaxaca-centro-oaxaca-29400079", ll:[17.0688,-96.7318], prec:500, by:"street", q:"Panorámica del Fortín 55, Oaxaca de Juárez, Oaxaca"},
+  {n:18, src:"pc", id:"pc-alcala-1000", title:"New furnished 2-bedroom apartment", area:"Macedonio Alcalá 1000", price:17000, cur:"MXN", beds:2, baths:1, status:"available",
+   near:"New-build apartment near Parque El Llano and the IMSS hospital.",
+   tags:["Furnished","65 m²","New build","Cistern"],
+   note:"No private outdoor space. The listing's “jardín” is the nearby Jardín Conzatti park.",
+   url:PC+"departamento-en-renta-macedonio-alcala-1000-oaxaca-centro-oaxaca-29165114", ll:[17.0712,-96.7215], prec:600, by:"street", q:"Macedonio Alcalá 1000, Oaxaca de Juárez, Oaxaca"},
+  {n:19, src:"pc", id:"pc-tinoco-room", title:"Furnished executive room", area:"Centro · Tinoco y Palacios", price:15000, cur:"MXN", beds:1, bedsLabel:"Room", baths:1, status:"available",
+   near:"Single furnished room on Tinoco y Palacios with its own power and water service.",
+   tags:["Furnished","15 m²","Internet included","Air conditioning"],
+   note:"A single room, not a full apartment.",
+   url:PC+"departamento-en-renta-oaxaca-centro-oaxaca-31514118", ll:[17.0640,-96.7274], prec:500, by:"street", q:"Tinoco y Palacios, Centro, Oaxaca de Juárez, Oaxaca"}
+];
+
+var MARKS = [
+  {t:"Zócalo", ll:[17.0607,-96.7254], cls:"main"},
+  {t:"Santo Domingo", ll:[17.0656,-96.7231], cls:"minor"},
+  {t:"El Llano", ll:[17.0684,-96.7203], cls:"minor"},
+  {t:"Monte Albán", ll:[17.0437,-96.7677], cls:"small"},
+  {t:"Airport (OAX)", ll:[16.9999,-96.7266], cls:"small"}
+];
+
+var state = {status:"all", src:"all", furn:"any", beds:0, maxMxn:null, cur:"MXN", rate:18, sort:"price-asc", sel:null, hot:null};
+try {
+  var saved = JSON.parse(localStorage.getItem("oax-rentals-prefs") || "{}");
+  if (saved.cur === "USD" || saved.cur === "MXN") state.cur = saved.cur;
+  if (typeof saved.rate === "number" && saved.rate > 5 && saved.rate < 40) state.rate = saved.rate;
+} catch (e) {}
+function savePrefs(){ try { localStorage.setItem("oax-rentals-prefs", JSON.stringify({cur:state.cur, rate:state.rate})); } catch (e) {} }
+
+var $ = function(id){ return document.getElementById(id); };
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+function byId(id){ for (var i=0;i<LISTINGS.length;i++) if (LISTINGS[i].id===id) return LISTINGS[i]; return null; }
+
+var zll = L.latLng(ZOCALO);
+LISTINGS.forEach(function(l){
+  l.dist = zll.distanceTo(L.latLng(l.ll));
+  l.src = l.src || "reo";
+  l.furn = /furnished/i.test(l.tags.join(" "));
+});
+function srcName(l){ return SOURCES[l.src]; }
+var PLACED = {street:"Pin placed by street", landmark:"Pin placed by the landmark the listing names", area:"Pin placed roughly in the area"};
+
+function mxn(l){ return l.cur === "MXN" ? l.price : l.price * state.rate; }
+function toDisp(vMxn){ return state.cur === "MXN" ? vMxn : vMxn / state.rate; }
+function disp(l){ return l.cur === state.cur ? l.price : toDisp(mxn(l)); }
+function money(v, cur){ var s = Math.round(v).toLocaleString("en-US"); return cur === "MXN" ? "$" + s + " MXN" : "US$" + s; }
+function compact(v, cur){
+  var p = cur === "MXN" ? "$" : "US$";
+  if (v < 1000) return p + Math.round(v);
+  var k = v / 1000; var s = (Math.abs(k - Math.round(k)) < 0.05) ? String(Math.round(k)) : k.toFixed(1);
+  return p + s + "k";
+}
+function priceParts(l){
+  var other = l.cur === "MXN" ? "USD" : "MXN";
+  if (l.cur === state.cur) {
+    var conv = l.cur === "MXN" ? l.price / state.rate : l.price * state.rate;
+    return {main: money(l.price, l.cur), sub: "≈ " + money(conv, other)};
+  }
+  return {main: "≈ " + money(disp(l), state.cur), sub: "Listed as " + money(l.price, l.cur)};
+}
+function km(l){ return (l.dist / 1000).toFixed(1) + " km"; }
+function bedbath(l){
+  var b = l.bedsLabel || (l.beds + (l.beds === 1 ? " bed" : " beds"));
+  return l.baths == null ? b : b + " · " + l.baths + (l.baths === 1 ? " bath" : " baths");
+}
+function chip(l){ return l.status === "available" ? '<span class="chip ok">Available</span>' : '<span class="chip">Leased</span>'; }
+function precText(m){ return m < 1000 ? "about " + m + " m" : "about " + (m/1000).toFixed(1) + " km"; }
+function gmaps(l){ return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(l.q); }
+
+function visible(l){
+  if (state.status !== "all" && l.status !== state.status) return false;
+  if (state.src !== "all" && l.src !== state.src) return false;
+  if (state.furn === "yes" && !l.furn) return false;
+  if (l.beds < state.beds) return false;
+  if (state.maxMxn != null && mxn(l) > state.maxMxn + 0.5) return false;
+  return true;
+}
+var SORTS = {
+  "price-asc": function(a,b){ return mxn(a) - mxn(b) || a.n - b.n; },
+  "price-desc": function(a,b){ return mxn(b) - mxn(a) || a.n - b.n; },
+  "dist": function(a,b){ return a.dist - b.dist || a.n - b.n; },
+  "beds": function(a,b){ return b.beds - a.beds || mxn(a) - mxn(b); },
+  "site": function(a,b){ return a.n - b.n; }
+};
+
+/* ---------- Map ---------- */
+var isWide = window.matchMedia("(min-width: 860px)");
+var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+var map = L.map("map", {
+  zoomControl:false, minZoom:11, maxZoom:16.5, zoomSnap:0.25, zoomDelta:0.5,
+  maxBounds:L.latLngBounds([16.94,-96.87],[17.18,-96.55]), maxBoundsViscosity:0.85
+}).setView(ZOCALO, 13);
+L.control.zoom({position:"topright"}).addTo(map);
+map.attributionControl.setPrefix(false);
+map.attributionControl.addAttribution("CONABIO 2023 · Natural Earth");
+
+var labelsPane = map.createPane("labels"); labelsPane.style.zIndex = 450; labelsPane.classList.add("leaflet-labels-pane");
+
+function polyLayer(data, cls){ return L.geoJSON(data, {interactive:false, style:function(){ return {className:cls, weight:1}; }}); }
+polyLayer(GEO.munis, "muni-fill").addTo(map);
+polyLayer(GEO.urban, "urban").addTo(map);
+polyLayer(GEO.munis, "muni-edge").addTo(map);
+polyLayer(GEO.roads, "road").addTo(map);
+[2000, 5000, 10000].forEach(function(r){
+  L.circle(ZOCALO, {radius:r, interactive:false, className:"ring"}).addTo(map);
+  var north = [ZOCALO[0] + r / 110700, ZOCALO[1]];
+  L.marker(north, {pane:"labels", interactive:false, keyboard:false,
+    icon:L.divIcon({className:"", iconSize:[0,0], html:'<div class="ringlbl' + (r === 2000 ? " small" : "") + '">' + (r/1000) + ' km</div>'})}).addTo(map);
+});
+GEO.labels.forEach(function(lb){
+  L.marker([lb.lat, lb.lng], {pane:"labels", interactive:false, keyboard:false,
+    icon:L.divIcon({className:"", iconSize:[0,0], html:'<div class="mlabel' + (lb.big ? " big" : " small") + '">' + esc(lb.n) + '</div>'})}).addTo(map);
+});
+GEO.shields.forEach(function(s){
+  L.marker([s.lat, s.lng], {pane:"labels", interactive:false, keyboard:false,
+    icon:L.divIcon({className:"", iconSize:[0,0], html:'<div class="shield small">MEX ' + esc(s.n) + '</div>'})}).addTo(map);
+});
+MARKS.forEach(function(m){
+  L.marker(m.ll, {pane:"labels", interactive:false, keyboard:false,
+    icon:L.divIcon({className:"", iconSize:[0,0], html:'<div class="lm ' + m.cls + '"><i></i><span>' + esc(m.t) + '</span></div>'})}).addTo(map);
+});
+
+function zoomClass(){
+  var z = map.getZoom(), c = map.getContainer().classList;
+  c.toggle("z-far", z < 12.5); c.toggle("z-mid", z >= 12.5 && z < 14);
+}
+map.on("zoomend", zoomClass);
+
+/* pins */
+var pins = {};
+LISTINGS.forEach(function(l){
+  var html = '<div class="pin' + (l.status === "leased" ? " leased" : "") + (l.src === "pc" ? " pc" : "") + '">' +
+    '<svg class="leader" width="1" height="1" aria-hidden="true"><line x1="0" y1="0" x2="0" y2="0"/></svg>' +
+    '<span class="anchor" aria-hidden="true"></span>' +
+    '<button class="dot" type="button" aria-label="Listing ' + l.n + ': ' + esc(l.title) + ', ' + esc(l.area) + ', ' + srcName(l) + '">' + l.n + '</button>' +
+    '<span class="tag"></span></div>';
+  var m = L.marker(l.ll, {interactive:false, keyboard:false, icon:L.divIcon({className:"pin-host", iconSize:[0,0], iconAnchor:[0,0], html:html})}).addTo(map);
+  var host = m.getElement(); var el = host.firstChild;
+  L.DomEvent.disableClickPropagation(host); L.DomEvent.disableScrollPropagation(host);
+  var dot = el.querySelector(".dot");
+  dot.addEventListener("click", function(){ select(l.id, "map"); });
+  dot.addEventListener("mouseenter", function(){ setHot(l.id); });
+  dot.addEventListener("mouseleave", function(){ setHot(null); });
+  dot.addEventListener("focus", function(){ setHot(l.id); });
+  dot.addEventListener("blur", function(){ setHot(null); });
+  pins[l.id] = {m:m, host:host, el:el, line:el.querySelector("line"), tag:el.querySelector(".tag"), dx:0, dy:0};
+});
+
+function layoutPins(){
+  var vis = LISTINGS.filter(visible);
+  var pts = vis.map(function(l){ var p = map.latLngToLayerPoint(l.ll); return {id:l.id, x:p.x, y:p.y, ox:p.x, oy:p.y}; });
+  var seen = {};
+  pts.forEach(function(p, i){
+    var key = Math.round(p.ox) + ":" + Math.round(p.oy);
+    var k = seen[key] = (seen[key] || 0) + 1;
+    if (k > 1) { var a = (k * 2.4); p.x += Math.cos(a) * 6; p.y += Math.sin(a) * 6; }
+  });
+  var MIN = 31;
+  for (var it = 0; it < 90; it++) {
+    for (var i = 0; i < pts.length; i++) for (var j = i + 1; j < pts.length; j++) {
+      var a = pts[i], b = pts[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx*dx + dy*dy);
+      if (d < MIN) {
+        if (d < 0.01) { dx = Math.cos(i + j); dy = Math.sin(i + j); d = 1; }
+        var push = (MIN - d) / 2, ux = dx / d, uy = dy / d;
+        a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push;
+      }
+    }
+    pts.forEach(function(p){ p.x += (p.ox - p.x) * 0.03; p.y += (p.oy - p.y) * 0.03; });
+  }
+  LISTINGS.forEach(function(l){ pins[l.id].host.hidden = !visible(l); });
+  pts.forEach(function(p){
+    var pin = pins[p.id], dx = Math.round(p.x - p.ox), dy = Math.round(p.y - p.oy);
+    pin.dx = dx; pin.dy = dy;
+    pin.el.style.setProperty("--tx", dx + "px"); pin.el.style.setProperty("--ty", dy + "px");
+    pin.line.setAttribute("x2", dx); pin.line.setAttribute("y2", dy);
+    pin.el.classList.toggle("moved", Math.abs(dx) + Math.abs(dy) > 6);
+  });
+  if (state.sel && popup.isOpen()) placePopup(byId(state.sel));
+}
+map.on("zoomend viewreset", layoutPins);
+
+function updatePinText(){
+  LISTINGS.forEach(function(l){
+    var pin = pins[l.id];
+    pin.tag.textContent = (l.cur === state.cur ? "" : "≈") + compact(disp(l), state.cur) + "/mo";
+    pin.el.classList.toggle("sel", state.sel === l.id);
+    pin.el.classList.toggle("hot", state.hot === l.id);
+    pin.m.setZIndexOffset(state.sel === l.id ? 1000 : state.hot === l.id ? 900 : 0);
+  });
+}
+
+var popup = L.popup({className:"pop", maxWidth:270, minWidth:220, autoPanPadding:L.point(24, 24), closeButton:true});
+var uncert = null;
+function popupHTML(l){
+  var p = priceParts(l);
+  return '<div class="pop"><p class="pop-k">No. ' + l.n + ' · ' + srcName(l) + '</p>' +
+    '<p class="pop-t">' + esc(l.title) + '</p>' +
+    '<p class="pop-p">' + p.main + '<small>/mo</small>' + chip(l) + '</p>' +
+    '<p class="pop-m">' + esc(l.area) + '<br>' + bedbath(l) + ' · ≈' + km(l) + ' from the Zócalo</p>' +
+    '<a href="' + l.url + '" target="_blank" rel="noopener">Open listing ↗</a></div>';
+}
+function placePopup(l){
+  var pin = pins[l.id];
+  popup.options.offset = L.point(pin.dx, pin.dy - 14);
+  popup.setLatLng(l.ll).setContent(popupHTML(l));
+  if (popup.isOpen()) popup.update(); else popup.openOn(map);
+}
+map.on("popupclose", function(e){ if (e.popup === popup && state.sel && !selecting) { state.sel = null; refreshSelection(); } });
+map.on("click", function(){ if (state.sel) { state.sel = null; map.closePopup(popup); refreshSelection(); } });
+
+var selecting = false;
+function select(id, from){
+  if (from === "list" && state.sel === id) { state.sel = null; map.closePopup(popup); refreshSelection(); return; }
+  state.sel = id;
+  refreshSelection();
+  if (!id) { map.closePopup(popup); return; }
+  var l = byId(id);
+  selecting = true;
+  if (from === "list") {
+    var z = Math.max(map.getZoom(), 13.5);
+    var done = function(){ layoutPins(); placePopup(l); selecting = false; };
+    if (map.getBounds().pad(-0.15).contains(l.ll) && map.getZoom() >= 13.5) { done(); }
+    else { map.once("moveend", done); if (reduce.matches) map.setView(l.ll, z, {animate:false}); else map.flyTo(l.ll, z, {duration:0.6}); }
+  } else {
+    placePopup(l); selecting = false;
+    var row = document.querySelector('.row[data-id="' + id + '"]');
+    if (row && isWide.matches) row.scrollIntoView({block:"nearest", behavior: reduce.matches ? "auto" : "smooth"});
+  }
+}
+function refreshSelection(){
+  if (uncert) { uncert.remove(); uncert = null; }
+  if (state.sel) { var l = byId(state.sel); uncert = L.circle(l.ll, {radius:l.prec, interactive:false, className:"uncert"}).addTo(map); }
+  renderList(); updatePinText();
+}
+function setHot(id){
+  state.hot = id;
+  updatePinText();
+  document.querySelectorAll(".row").forEach(function(r){ r.classList.toggle("hot", r.getAttribute("data-id") === id); });
+}
+
+/* ---------- List ---------- */
+var listEl = $("list");
+function rowHTML(l){
+  var sel = state.sel === l.id, p = priceParts(l);
+  var h = '<li class="row' + (sel ? " sel" : "") + (l.status === "leased" ? " leased" : "") + (l.src === "pc" ? " pc" : "") + '" data-id="' + l.id + '">' +
+    '<button class="row-btn" type="button" aria-expanded="' + sel + '"' + (sel ? ' aria-controls="d-' + l.id + '"' : "") + '>' +
+    '<span class="num" aria-hidden="true">' + l.n + '</span><span class="row-body">' +
+    '<span class="row-top"><span class="price">' + p.main + '<small>/mo</small></span>' + chip(l) + '</span>' +
+    '<span class="row-title">' + esc(l.title) + '</span>' +
+    '<span class="row-meta">' + esc(l.area) + ' · ' + bedbath(l) + ' · ≈' + km(l) + ' from the Zócalo</span>' +
+    '<span class="row-sub">' + p.sub + ' · ' + srcName(l) + '</span></span></button>';
+  if (sel) {
+    h += '<div class="detail" id="d-' + l.id + '"><p class="near">' + esc(l.near) + '</p>' +
+      '<ul class="tags">' + l.tags.map(function(t){ return "<li>" + esc(t) + "</li>"; }).join("") + '</ul>' +
+      (l.note ? '<p class="note">' + esc(l.note) + '</p>' : "") +
+      '<p class="approx">' + (PLACED[l.by] || "Pin placed by neighborhood") + '; the home could be ' + precText(l.prec) + ' away.</p>' +
+      '<div class="links"><a class="primary" href="' + l.url + '" target="_blank" rel="noopener">Open listing ↗</a>' +
+      '<a href="' + gmaps(l) + '" target="_blank" rel="noopener">Area in Google Maps ↗</a>' +
+      '<button class="to-map" type="button" data-tomap="1">Show on map</button></div></div>';
+  }
+  return h + "</li>";
+}
+function renderList(){
+  var focusId = null, ae = document.activeElement;
+  if (ae && ae.closest && ae.closest(".row")) focusId = ae.closest(".row").getAttribute("data-id");
+  var items = LISTINGS.filter(visible).sort(SORTS[state.sort]);
+  listEl.innerHTML = items.map(rowHTML).join("");
+  $("empty").hidden = items.length > 0;
+  if (focusId) { var b = listEl.querySelector('.row[data-id="' + focusId + '"] .row-btn'); if (b) b.focus({preventScroll:true}); }
+  summarize(items);
+}
+listEl.addEventListener("click", function(e){
+  var row = e.target.closest(".row"); if (!row) return;
+  var id = row.getAttribute("data-id");
+  if (e.target.closest("[data-tomap]")) { $("mapwrap").scrollIntoView({behavior: reduce.matches ? "auto" : "smooth", block:"start"}); return; }
+  if (e.target.closest(".row-btn")) select(id, "list");
+});
+listEl.addEventListener("mouseover", function(e){ var r = e.target.closest(".row"); if (r && state.hot !== r.getAttribute("data-id")) setHot(r.getAttribute("data-id")); });
+listEl.addEventListener("mouseleave", function(){ setHot(null); });
+
+function summarize(items){
+  var avail = items.filter(function(l){ return l.status === "available"; }).length;
+  var vals = items.map(disp);
+  var range = vals.length ? money(Math.min.apply(null, vals), state.cur) + " – " + money(Math.max.apply(null, vals), state.cur) : "";
+  $("summary").innerHTML = "<b>" + items.length + "</b> of " + LISTINGS.length + " listings shown · <b>" + avail + "</b> available" +
+    (range ? "<br>Rents " + range + " a month" : "");
+}
+
+/* ---------- Controls ---------- */
+var slider = $("maxrent"), out = $("maxout"), rateEl = $("rate");
+function syncSlider(){
+  var step = state.cur === "MXN" ? 500 : 25;
+  var vals = LISTINGS.map(disp);
+  var lo = Math.floor(Math.min.apply(null, vals) / step) * step, hi = Math.ceil(Math.max.apply(null, vals) / step) * step;
+  slider.min = lo; slider.max = hi; slider.step = step;
+  if (state.maxMxn == null) { slider.value = hi; out.textContent = "Any"; }
+  else { var v = Math.min(hi, Math.max(lo, toDisp(state.maxMxn))); slider.value = v; out.textContent = "Up to " + money(+slider.value, state.cur); }
+}
+function readRadios(){
+  var f = $("controls");
+  state.status = f.querySelector('input[name="status"]:checked').value;
+  state.src = f.querySelector('input[name="src"]:checked').value;
+  state.furn = f.querySelector('input[name="furn"]:checked').value;
+  state.beds = +f.querySelector('input[name="beds"]:checked').value;
+}
+$("controls").addEventListener("submit", function(e){ e.preventDefault(); });
+$("controls").addEventListener("change", function(e){
+  var t = e.target;
+  if (t.name === "status" || t.name === "beds" || t.name === "src" || t.name === "furn") { readRadios(); afterFilter(); }
+  else if (t.name === "cur") { state.cur = t.value; savePrefs(); syncSlider(); refreshAll(); }
+  else if (t.id === "sort") { state.sort = t.value; renderList(); }
+});
+slider.addEventListener("input", function(){
+  var v = +slider.value;
+  if (v >= +slider.max) { state.maxMxn = null; out.textContent = "Any"; }
+  else { state.maxMxn = state.cur === "MXN" ? v : v * state.rate; out.textContent = "Up to " + money(v, state.cur); }
+  afterFilter();
+});
+rateEl.addEventListener("input", function(){
+  var r = parseFloat(rateEl.value);
+  if (!(r > 5 && r < 40)) return;
+  state.rate = r; savePrefs(); syncSlider(); refreshAll();
+});
+function afterFilter(){
+  if (state.sel && !visible(byId(state.sel))) { state.sel = null; map.closePopup(popup); if (uncert) { uncert.remove(); uncert = null; } }
+  renderList(); layoutPins(); updatePinText();
+}
+function refreshAll(){
+  renderList(); layoutPins(); updatePinText();
+  if (state.sel && popup.isOpen()) placePopup(byId(state.sel));
+}
+
+function fitAll(animate){
+  var pts = LISTINGS.filter(visible).map(function(l){ return l.ll; }); pts.push(ZOCALO);
+  map.fitBounds(L.latLngBounds(pts), {padding:[44,44], maxZoom:15, animate:!!animate && !reduce.matches});
+}
+$("fit").addEventListener("click", function(){ map.closePopup(popup); fitAll(true); });
+
+$("copytel").addEventListener("click", function(){
+  var btn = this, txt = $("tel").textContent;
+  function selectIt(){ var r = document.createRange(); r.selectNodeContents($("tel")); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = "Selected"; }
+  try {
+    navigator.clipboard.writeText(txt).then(function(){ btn.textContent = "Copied"; setTimeout(function(){ btn.textContent = "Copy"; }, 1600); }, selectIt);
+  } catch (e) { selectIt(); }
+});
+
+/* ---------- Boot ---------- */
+$(state.cur === "USD" ? "cur-usd" : "cur-mxn").checked = true;
+rateEl.value = state.rate.toFixed(2);
+$("sort").value = state.sort;
+if (isWide.matches) $("key").open = true;
+syncSlider();
+fitAll(false);
+zoomClass();
+layoutPins();
+renderList();
+updatePinText();
+window.addEventListener("resize", function(){ map.invalidateSize(); });
+})();
+</script>
+
+</body></html>
