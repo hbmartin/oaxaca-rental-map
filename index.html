@@ -1,5 +1,6 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Oaxaca Rental Map</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,7 +13,7 @@
 :root{
   --bg:#E8ECE5; --panel:#F5F7F2; --panel-a:rgba(245,247,242,.88); --ink:#17201B; --muted:#56635A; --line:#D0D8CE;
   --hover:#EBF0E7; --sel:#E3E9DE;
-  --land:#E0E7DA; --urban:#CAD4C3; --edge:#93A396; --road:#B9833A; --ring:#7A8B7E; --outside:#D6DDD2;
+  --land:#E0E7DA; --urban:#CAD4C3; --edge:#93A396; --road:#B9833A; --ring:#7A8B7E; --outside:#D6DDD2; --boundary:#76509D;
   --accent:#A3174B; --accent-ink:#FFFFFF; --leased:#748279; --ok:#2C6A48; --ok-bg:#DCEBDF; --warn-bg:#F6E9D7; --warn:#7A4A12;
   --shadow:rgba(23,32,27,.22);
   --display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
@@ -119,11 +120,14 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .leaflet-container a{color:var(--accent)}
 .muni-fill{fill:var(--land);fill-opacity:1;stroke:none}
 .urban{fill:var(--urban);fill-opacity:1;stroke:none}
-.muni-edge{fill:none;stroke:var(--edge);stroke-width:1;stroke-dasharray:3 4}
+.muni-edge{fill:none;stroke:var(--boundary);stroke-width:1.5;stroke-dasharray:6 4}
 .road{fill:none;stroke:var(--road);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:.85}
 .ring{fill:none;stroke:var(--ring);stroke-width:1;stroke-dasharray:1 5;stroke-linecap:round}
 .uncert{fill:var(--accent);fill-opacity:.08;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:5 5}
 .leaflet-pane.leaflet-labels-pane{pointer-events:none}
+#map .maplibregl-canvas{max-width:none!important}
+.streets-ready .base-only{display:none}
+.streets-ready .lm span{background:var(--panel-a);border-radius:4px;padding:2px 4px;text-shadow:none}
 .mlabel{white-space:nowrap;transform:translate(-50%,-50%);font:500 11px/1 var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-shadow:0 0 3px var(--land),0 0 3px var(--land),0 0 6px var(--land)}
 .mlabel.big{font-size:12px;letter-spacing:.1em;font-weight:600}
 .lm{position:relative;white-space:nowrap}
@@ -169,7 +173,13 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .pop-m{color:var(--muted);font-size:12.5px;margin:2px 0 10px!important;font-variant-numeric:tabular-nums}
 .pop a{font-weight:600;text-decoration:none}
 
-.fit{position:absolute;z-index:800;top:max(12px,env(safe-area-inset-top,0px));left:12px;font:600 13px/1 var(--body);padding:9px 12px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink);box-shadow:0 1px 3px var(--shadow);cursor:pointer}
+.maptools{position:absolute;z-index:800;top:max(12px,env(safe-area-inset-top,0px));left:12px;right:54px;display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;pointer-events:none}
+.maptools > *{pointer-events:auto}
+.fit,.boundary-toggle{font:600 13px/1 var(--body);padding:9px 12px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink);box-shadow:0 1px 3px var(--shadow);cursor:pointer;min-height:36px}
+.boundary-toggle{display:flex;align-items:center;gap:7px}
+.boundary-toggle input{margin:0;accent-color:var(--boundary)}
+.map-status{flex-basis:100%;max-width:320px;background:var(--panel-a);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:12px}
+.map-status button{margin-left:8px;font:600 12px var(--body);color:var(--accent);background:none;border:0;text-decoration:underline;cursor:pointer}
 .fit:hover{background:var(--hover)}
 .key{position:absolute;z-index:1001;left:12px;bottom:12px;background:var(--panel-a);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:12px;max-width:calc(100% - 24px);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .key summary{cursor:pointer;font-weight:600;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
@@ -183,7 +193,7 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .k-ring{width:18px;height:0;border-top:2px dotted var(--ring)}
 .k-urban{width:18px;height:12px;border-radius:3px;background:var(--urban);box-shadow:inset 0 0 0 1px var(--line)}
 .k-road{width:18px;height:0;border-top:3px solid var(--road);border-radius:2px}
-.k-edge{width:18px;height:0;border-top:1.5px dashed var(--edge)}
+.k-edge{width:18px;height:0;border-top:1.5px dashed var(--boundary)}
 
 @media (max-width:859px){
   html,body{height:auto}
@@ -207,7 +217,13 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 
   <main class="mapwrap" id="mapwrap">
     <div id="map" role="region" aria-label="Map of rental listings"></div>
-    <button class="fit" id="fit" type="button">Show all</button>
+    <div class="maptools">
+      <button class="fit" id="fit" type="button">Show all</button>
+      <label class="boundary-toggle" title="Municipal limits from CONABIO 2023; not colonia or property boundaries">
+        <input id="boundaries" type="checkbox" checked><span>Municipal boundaries</span>
+      </label>
+      <div class="map-status" id="map-status" role="status" hidden><span id="map-status-text"></span><button id="map-retry" type="button" hidden>Retry</button></div>
+    </div>
     <details class="key" id="key">
       <summary>Map key</summary>
       <ul>
@@ -216,8 +232,8 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
         <li><span class="k"><span class="k-dot l"></span></span>Leased long-term</li>
         <li><span class="k"><span class="k-circle"></span></span>Where the selected home could be</li>
         <li><span class="k"><span class="k-ring"></span></span>2, 5 and 10 km from the Zócalo</li>
-        <li><span class="k"><span class="k-urban"></span></span>Built-up area</li>
-        <li><span class="k"><span class="k-road"></span></span>Federal highway</li>
+        <li class="base-only"><span class="k"><span class="k-urban"></span></span>Built-up area (simplified map)</li>
+        <li class="base-only"><span class="k"><span class="k-road"></span></span>Federal highway (simplified map)</li>
         <li><span class="k"><span class="k-edge"></span></span>Municipal boundary</li>
       </ul>
     </details>
@@ -299,12 +315,14 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
       <p>Listings, prices and lease status as posted on <a href="https://www.realestateoaxaca.com/rentals-residential" target="_blank" rel="noopener">realestateoaxaca.com/rentals-residential</a>, read 18 Nov 2026.</p>
       <p>Listings 13–19 are every rental tagged furnished (Amueblado) among the 104 results on <a href="https://propiedades.com/oaxaca-centro-oaxaca-de-juarez/renta" target="_blank" rel="noopener">propiedades.com's Oaxaca Centro rentals</a>, read 18 Nov 2026. Outdoor-space notes come from each listing's tags and the visible start of its description; the full descriptions were not readable. Contact those advertisers through each listing's page.</p>
       <p>Pins are approximate. Real Estate Oaxaca listings name a neighborhood or landmark, and Propiedades.com listings give a street but no exact map point, so each pin sits in the stated area and the dashed circle shows how far off it could be. Pins that would overlap are nudged apart, with a thin line back to their spot.</p>
-      <p>Basemap drawn from municipal boundaries (CONABIO, 2023) and Natural Earth highways and built-up area, which are generalized. Distances are straight-line from the Zócalo. Dollar and peso conversions use the rate you set above.</p>
+      <p>Street basemap: <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> Positron, using OpenMapTiles and OpenStreetMap data, with quieter place and water-feature labels. Municipal boundaries are generalized CONABIO 2023 geometry; use the map toggle to show or hide them. These are municipal limits, not colonia or property boundaries. A simplified embedded map using Natural Earth highways and built-up area appears if the street map cannot load. Distances are straight-line from the Zócalo. Dollar and peso conversions use the rate you set above.</p>
     </footer>
   </aside>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
 <script>
 (function(){
 "use strict";
@@ -409,13 +427,14 @@ var MARKS = [
   {t:"Airport (OAX)", ll:[16.9999,-96.7266], cls:"small"}
 ];
 
-var state = {status:"all", src:"all", furn:"any", beds:0, maxMxn:null, cur:"MXN", rate:18, sort:"price-asc", sel:null, hot:null};
+var state = {status:"all", src:"all", furn:"any", beds:0, maxMxn:null, cur:"MXN", rate:18, sort:"price-asc", boundaries:true, sel:null, hot:null};
 try {
   var saved = JSON.parse(localStorage.getItem("oax-rentals-prefs") || "{}");
   if (saved.cur === "USD" || saved.cur === "MXN") state.cur = saved.cur;
   if (typeof saved.rate === "number" && saved.rate > 5 && saved.rate < 40) state.rate = saved.rate;
+  if (typeof saved.boundaries === "boolean") state.boundaries = saved.boundaries;
 } catch (e) {}
-function savePrefs(){ try { localStorage.setItem("oax-rentals-prefs", JSON.stringify({cur:state.cur, rate:state.rate})); } catch (e) {} }
+function savePrefs(){ try { localStorage.setItem("oax-rentals-prefs", JSON.stringify({cur:state.cur, rate:state.rate, boundaries:state.boundaries})); } catch (e) {} }
 
 var $ = function(id){ return document.getElementById(id); };
 function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
@@ -482,15 +501,87 @@ var map = L.map("map", {
 }).setView(ZOCALO, 13);
 L.control.zoom({position:"topright"}).addTo(map);
 map.attributionControl.setPrefix(false);
-map.attributionControl.addAttribution("CONABIO 2023 · Natural Earth");
+map.attributionControl.addAttribution("CONABIO 2023");
+map.attributionControl.addAttribution("Natural Earth");
 
 var labelsPane = map.createPane("labels"); labelsPane.style.zIndex = 450; labelsPane.classList.add("leaflet-labels-pane");
+var simplifiedPane = map.createPane("simplified"); simplifiedPane.style.zIndex = 300; simplifiedPane.style.pointerEvents = "none";
 
-function polyLayer(data, cls){ return L.geoJSON(data, {interactive:false, style:function(){ return {className:cls, weight:1}; }}); }
-polyLayer(GEO.munis, "muni-fill").addTo(map);
-polyLayer(GEO.urban, "urban").addTo(map);
-polyLayer(GEO.munis, "muni-edge").addTo(map);
-polyLayer(GEO.roads, "road").addTo(map);
+function polyLayer(data, cls, pane){ return L.geoJSON(data, {interactive:false, pane:pane || "overlayPane", style:function(){ return {className:cls, weight:1}; }}); }
+var simplifiedMap = L.layerGroup([
+  polyLayer(GEO.munis, "muni-fill", "simplified"),
+  polyLayer(GEO.urban, "urban", "simplified"),
+  polyLayer(GEO.roads, "road", "simplified")
+]).addTo(map);
+var municipalBoundaries = polyLayer(GEO.munis, "muni-edge");
+if (state.boundaries) municipalBoundaries.addTo(map);
+$("boundaries").checked = state.boundaries;
+$("boundaries").addEventListener("change", function(){
+  state.boundaries = this.checked;
+  if (state.boundaries) municipalBoundaries.addTo(map); else municipalBoundaries.remove();
+  savePrefs();
+});
+
+// Keep the existing Leaflet overlays above the street basemap. The embedded
+// geometry remains available when the renderer or tile service is unavailable.
+var streetLayer = null, streetTimer = null;
+var streetCredit = '<a href="https://openfreemap.org/">OpenFreeMap</a> · <a href="https://openmaptiles.org/">© OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a>';
+function streetStatus(message, retry){
+  $("map-status").hidden = !message;
+  $("map-status-text").textContent = message;
+  $("map-retry").hidden = !retry;
+  $("map-retry").textContent = window.maplibregl && L.maplibreGL ? "Retry" : "Reload";
+}
+function streetFallback(){
+  clearTimeout(streetTimer);
+  if (streetLayer) {
+    var old = streetLayer; streetLayer = null;
+    // A failed WebGL constructor leaves no GL map for the adapter to remove.
+    if (!old.getMaplibreMap()) old.onRemove = function(){ var container = this.getContainer(); if (container) container.remove(); };
+    old.remove();
+  }
+  simplifiedMap.addTo(map);
+  $("mapwrap").classList.remove("streets-ready");
+  map.attributionControl.removeAttribution(streetCredit);
+  map.attributionControl.removeAttribution("Natural Earth");
+  map.attributionControl.addAttribution("Natural Earth");
+  streetStatus("Streets unavailable. Showing a simplified map.", true);
+}
+function loadStreets(){
+  if (streetLayer) return;
+  streetStatus("Loading streets…", false);
+  try {
+    if (!window.maplibregl || !L.maplibreGL) { streetFallback(); return; }
+    var layer = L.maplibreGL({
+      style:"https://tiles.openfreemap.org/styles/positron",
+      interactive:false, attributionControl:false
+    });
+    streetLayer = layer;
+    layer.addTo(map);
+    var gl = layer.getMaplibreMap();
+    gl.on("style.load", function(){
+      gl.getStyle().layers.forEach(function(l){
+        if (l.type === "symbol" && (l["source-layer"] === "poi" || l["source-layer"] === "water_name")) {
+          gl.setLayoutProperty(l.id, "visibility", "none");
+        }
+      });
+    });
+    gl.once("idle", function(){
+      if (streetLayer !== layer) return;
+      clearTimeout(streetTimer);
+      simplifiedMap.remove();
+      $("mapwrap").classList.add("streets-ready");
+      map.attributionControl.removeAttribution("Natural Earth");
+      map.attributionControl.addAttribution(streetCredit);
+      streetStatus("", false);
+    });
+    gl.on("error", function(){ if (streetLayer === layer) streetFallback(); });
+    streetTimer = setTimeout(function(){ if (streetLayer === layer) streetFallback(); }, 20000);
+  } catch (e) { console.warn("Street basemap unavailable", e); streetFallback(); }
+}
+$("map-retry").addEventListener("click", function(){
+  if (!window.maplibregl || !L.maplibreGL) location.reload(); else loadStreets();
+});
 [2000, 5000, 10000].forEach(function(r){
   L.circle(ZOCALO, {radius:r, interactive:false, className:"ring"}).addTo(map);
   var north = [ZOCALO[0] + r / 110700, ZOCALO[1]];
@@ -499,11 +590,11 @@ polyLayer(GEO.roads, "road").addTo(map);
 });
 GEO.labels.forEach(function(lb){
   L.marker([lb.lat, lb.lng], {pane:"labels", interactive:false, keyboard:false,
-    icon:L.divIcon({className:"", iconSize:[0,0], html:'<div class="mlabel' + (lb.big ? " big" : " small") + '">' + esc(lb.n) + '</div>'})}).addTo(map);
+    icon:L.divIcon({className:"", iconSize:[0,0], html:'<div class="mlabel base-only' + (lb.big ? " big" : " small") + '">' + esc(lb.n) + '</div>'})}).addTo(simplifiedMap);
 });
 GEO.shields.forEach(function(s){
   L.marker([s.lat, s.lng], {pane:"labels", interactive:false, keyboard:false,
-    icon:L.divIcon({className:"", iconSize:[0,0], html:'<div class="shield small">MEX ' + esc(s.n) + '</div>'})}).addTo(map);
+    icon:L.divIcon({className:"", iconSize:[0,0], html:'<div class="shield small">MEX ' + esc(s.n) + '</div>'})}).addTo(simplifiedMap);
 });
 MARKS.forEach(function(m){
   L.marker(m.ll, {pane:"labels", interactive:false, keyboard:false,
@@ -746,6 +837,7 @@ layoutPins();
 renderList();
 updatePinText();
 window.addEventListener("resize", function(){ map.invalidateSize(); });
+loadStreets();
 })();
 </script>
 
