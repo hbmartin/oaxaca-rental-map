@@ -9,21 +9,23 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startServer } from '../scripts/serve.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'test-results');
-const GROUPS = ['align', 'ready', 'dark', 'libs', 'nowebgl', 'ctorfail', 'boundaries', 'phone', 'slow'];
+const GROUPS = ['align', 'ready', 'selfhost', 'file', 'dark', 'libs', 'archive', 'nowebgl', 'ctorfail', 'boundaries', 'phone', 'slow'];
 const ONLY = process.argv[2] ? process.argv[2].split(',') : GROUPS;
 
 // Requests the checks block or delay to simulate failures.
 const NET = {
-  libs: 'https://unpkg.com/**',
-  style: 'https://tiles.openfreemap.org/styles/**',
-  tiles: 'https://tiles.openfreemap.org/planet/**',
-  slow: 'https://tiles.openfreemap.org/styles/**',
+  libs: '**/vendor/**',
+  style: '**/basemap/style.json',
+  tiles: '**/basemap/oaxaca.pmtiles',
+  slow: '**/basemap/oaxaca.pmtiles',
 };
+// The only hosts the page may contact besides its own: Leaflet from cdnjs and the two UI typefaces.
+const THIRD_PARTY = ['cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 const results = [];
 function record(name, pass, detail) {
@@ -165,6 +167,52 @@ const checks = {
     await ctx.close();
   },
 
+  async selfhost(browser) {
+    // Sweeps the viewable area at several zooms: every tile, glyph range and sprite must come from
+    // this site and load. A missing glyph range would fail its whole tile.
+    const { ctx, page } = await newPage(browser);
+    const hosts = new Set(), failed = [];
+    page.on('request', r => { if (/^https?:/.test(r.url())) hosts.add(new URL(r.url()).host); });
+    page.on('requestfailed', r => failed.push(r.url() + ' (' + (r.failure() && r.failure().errorText) + ')'));
+    page.on('response', r => { if (r.status() >= 400) failed.push(r.status() + ' ' + r.url()); });
+    await page.goto(url());
+    await waitReady(page);
+    const [w, s, e, n] = [-96.87, 16.94, -96.55, 17.18];
+    const spots = [[(s + n) / 2, (w + e) / 2], [s, w], [s, e], [n, w], [n, e]];
+    const views = [[11, spots[0]], ...[13, 15, 16.5].flatMap(z => spots.map(ll => [z, ll]))];
+    // Waits until MapLibre has loaded everything in view, then lets label fades finish.
+    const settle = () => withGL(page, gl => new Promise(res => {
+      const t = setTimeout(res, 8000);
+      gl.once('idle', () => { clearTimeout(t); setTimeout(res, 1000); });
+      gl.triggerRepaint();
+    }));
+    for (const [z, ll] of views) {
+      await page.evaluate(([z, ll]) => window.__map.setView(ll, z, { animate: false }), [z, ll]);
+      await settle();
+    }
+    const own = new URL(BASE).host;
+    const foreign = [...hosts].filter(h => h !== own && !THIRD_PARTY.includes(h));
+    const tileWarnings = page.warns.filter(w => /Street basemap/.test(w)).length;
+    record('self-hosted: basemap requests stay on this site and none fail across the map', !foreign.length && !failed.length && !tileWarnings,
+      `${views.length} views; hosts ${[...hosts].join(', ')}` + (foreign.length ? `; foreign: ${foreign.join(', ')}` : '') + (failed.length ? `; failed: ${failed.slice(0, 5).join(' | ')}` : '') + (tileWarnings ? `; ${tileWarnings} basemap warnings` : ''));
+    for (const [name, ll, z] of [['centro', [17.0607, -96.7254], 16], ['overview', [17.07, -96.71], 11]]) {
+      await page.evaluate(([ll, z]) => window.__map.setView(ll, z, { animate: false }), [ll, z]);
+      await settle();
+      await shot(page, 'selfhost-' + name);
+    }
+    await ctx.close();
+  },
+
+  async file(browser) {
+    const { ctx, page } = await newPage(browser);
+    await page.goto(pathToFileURL(path.join(ROOT, 'index.html')).href);
+    await page.waitForTimeout(1500);
+    const p = await probe(page);
+    const pins = await page.locator('.pin-host:not([hidden])').count();
+    record('opened from disk: simplified map, pins and a note to serve over HTTP', /served over HTTP/.test(p.status) && !p.retry && !p.hasLayer && pins > 0 && !page.errors.length, `status "${p.status}", ${pins} pins, errors: ${page.errors.join(' | ') || 'none'}`);
+    await ctx.close();
+  },
+
   async dark(browser) {
     const { ctx, page } = await newPage(browser, { colorScheme: 'dark' });
     await page.goto(url());
@@ -208,6 +256,22 @@ const checks = {
     await waitReady(page, 60000).catch(() => {});
     const r = await probe(page);
     record('Retry after unblocking loads the streets', r.ready && !r.status, `ready=${r.ready} errors=${page.errors.length}`);
+    await ctx.close();
+  },
+
+  async archive(browser) {
+    // pmtiles caches the archive header, including a failed fetch, so Retry has to start afresh.
+    const blocked = { on: true };
+    const { ctx, page } = await newPage(browser, { routes: [[NET.tiles, r => blocked.on ? r.abort() : r.continue()]] });
+    await page.goto(url());
+    await waitRetry(page, 30000);
+    const p = await probe(page);
+    record('tile archive unreachable: fallback with Retry', /unavailable/.test(p.status) && p.retry && !p.hasLayer, `status "${p.status}"`);
+    blocked.on = false;
+    await page.click('#map-retry');
+    await waitReady(page, 30000).catch(() => {});
+    const r = await probe(page);
+    record('Retry after the archive is reachable loads the streets', r.ready && !r.status, `ready=${r.ready}, status "${r.status}"`);
     await ctx.close();
   },
 

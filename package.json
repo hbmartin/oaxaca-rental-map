@@ -5,9 +5,14 @@
   "type": "module",
   "scripts": {
     "serve": "node scripts/serve.mjs",
-    "test": "node tests/verify.mjs"
+    "test": "node tests/verify.mjs",
+    "vendor": "node scripts/vendor.mjs",
+    "build:basemap": "python3 scripts/build_basemap.py"
   },
   "devDependencies": {
-    "playwright": "1.64.1"
+    "@maplibre/maplibre-gl-leaflet": "0.1.4",
+    "maplibre-gl": "5.6.1",
+    "playwright": "1.64.1",
+    "pmtiles": "4.5.0"
   }
 }

@@ -9,9 +9,29 @@ Both sources were read on 18 Nov 2026. Prices, availability and lease status wil
 
 ## Viewing it
 
-Open `index.html` in any modern browser. It has no build step, server requirement, or API key. It loads Leaflet 1.9.4 and two typefaces from Google Fonts up front. MapLibre GL JS 5.6.1 and the MapLibre–Leaflet adapter 0.1.4 are fetched from unpkg after the page is running, and only in browsers with WebGL.
+The page is published with GitHub Pages at **https://hbmartin.github.io/oaxaca-rental-map/**. It has no build step at view time and no API key.
 
-The default basemap is [OpenFreeMap Positron](https://openfreemap.org/), with detailed streets, buildings, and street/place names. Water-feature and airport name labels are hidden to keep rental pins prominent, as is the basemap's own label for the city, which would sit on the page's Zócalo marker; the page draws its own airport marker. Positron stays light regardless of the system theme, so in dark mode the map panel switches to the light palette while the streets are showing. Loading street tiles requires an internet connection and WebGL. The embedded simplified map stays on screen until the streets have rendered. If the street map can't load, or its WebGL context is lost, the page shows the simplified map and a Retry button; if loading is merely slow, it says so and keeps trying. Once the streets have rendered, any street tiles that fail to load are retried automatically, waiting longer after each failure and retrying at once when the connection returns. Listing filters, pins, and uncertainty circles remain usable throughout. The embedded geometry is a fallback, not a full offline installation: the browser libraries and fonts still require a network connection or a browser cache.
+To run it locally, serve the folder over HTTP: `npm run serve` (no `npm install` needed for this), then open http://127.0.0.1:8766/. Any static server that supports HTTP Range requests works. Opening `index.html` straight from disk also works for the listings, filters and pins, but browsers won't let a file page fetch the tile archive, so it shows the simplified map with a note.
+
+Leaflet 1.9.4 (cdnjs) and two typefaces (Google Fonts) load up front. Everything else is served from this repository: MapLibre GL JS 5.6.1, the MapLibre–Leaflet adapter 0.1.4 and PMTiles 4.5.0 in `vendor/`, and the street tiles, style, fonts and sprites in `basemap/`. The map libraries load after the page is running, and only in browsers with WebGL.
+
+The street basemap uses [OpenFreeMap](https://openfreemap.org/)'s Positron style over a self-hosted extract of the Oaxaca area (`basemap/oaxaca.pmtiles`), with detailed streets, buildings, and street/place names. Water-feature and airport name labels are hidden to keep rental pins prominent, as is the basemap's own label for the city, which would sit on the page's Zócalo marker; the page draws its own airport marker. Positron stays light regardless of the system theme, so in dark mode the map panel switches to the light palette while the streets are showing. The street map needs WebGL. The embedded simplified map stays on screen until the streets have rendered. If the street map can't load, or its WebGL context is lost, the page shows the simplified map and a Retry button; if loading is merely slow, it says so and keeps trying. Once the streets have rendered, any street tiles that fail to load are retried automatically, waiting longer after each failure and retrying at once when the connection returns. Listing filters, pins, and uncertainty circles remain usable throughout. The embedded geometry is a fallback, not a full offline installation: Leaflet and the UI typefaces still come from their CDNs.
+
+## Refreshing the basemap
+
+`basemap/` is generated and committed. To rebuild it from current OpenStreetMap data:
+
+```sh
+npm run build:basemap   # or: python3 scripts/build_basemap.py [--refresh-osm]
+```
+
+It needs Java 21+ and Python 3.10+. The first run downloads about 830 MB into the git-ignored `.cache/`: [Planetiler](https://github.com/onthegomap/planetiler) 0.10.2 (93 MB, checksum-verified), Geofabrik's Mexico extract (650 MB), lake centerlines (81 MB), and Planetiler's small sample ocean and Natural Earth files, which are enough for an inland city. It takes a few minutes; later runs reuse the downloads, and `--refresh-osm` fetches a newer extract. The script:
+
+1. builds an OpenMapTiles-schema extract, the schema Positron is written for;
+2. keeps only the tiles each zoom level can show inside the page's `maxBounds` (wider at the lowest zooms, where the view is larger than the bounds) and writes `basemap/oaxaca.pmtiles`;
+3. fetches Positron's style, sprites and every glyph range the tile labels use from OpenFreeMap, rewriting only the style's URLs.
+
+`basemap/build.json` records the build date, source versions and per-zoom extents. If you change the map's `maxBounds` or zoom limits in `index.html`, update the matching constants at the top of the script. To change the vendored libraries, edit their versions in `package.json`, then run `npm install && npm run vendor` and update the paths in `index.html`.
 
 ## What the page does
 
@@ -55,13 +75,13 @@ Listings live in the `LISTINGS` array inside the `<script>` near the bottom of `
 
 ## Tests
 
-`tests/verify.mjs` drives the page in headless Chromium and checks the street basemap end to end. It covers alignment while panning and zooming, credits, hidden labels, dark mode, failure and Retry paths (blocked libraries or style, no WebGL, a failing WebGL constructor, context loss), boundary toggling, the phone layout, and slow or background-tab loading.
+`tests/verify.mjs` drives the page in headless Chromium and checks the street basemap end to end. It covers alignment while panning and zooming, credits, hidden labels, that every basemap request stays on this site and succeeds across the whole map, opening the file from disk, dark mode, failure and Retry paths (blocked libraries, style or tile archive, no WebGL, a failing WebGL constructor, context loss), boundary toggling, the phone layout, and slow or background-tab loading.
 
 ```sh
 npm install
 npx playwright install chromium   # once; or set PW_CHANNEL=chrome to use installed Google Chrome
 npm test                          # about 90 s; starts its own local server
-npm test -- ready,dark            # only some groups: align, ready, dark, libs, nowebgl, ctorfail, boundaries, phone, slow
+npm test -- ready,dark            # only some groups: align, ready, selfhost, file, dark, libs, archive, nowebgl, ctorfail, boundaries, phone, slow
 BASE_URL=https://example.org/map/ npm test   # against a deployed copy
 ```
 
@@ -69,4 +89,4 @@ Screenshots and `results.json` are written to `test-results/`. `npm run serve` s
 
 ## Credits
 
-Street basemap: OpenFreeMap Positron, © OpenMapTiles, data © OpenStreetMap contributors. The visible attribution is retained on the map. Municipal boundaries: CONABIO, 2023. The simplified fallback also uses Natural Earth highways and built-up areas. Listing text is summarized from the two source sites; all listings belong to their advertisers.
+Street basemap: tiles © [OpenMapTiles](https://openmaptiles.org/), built with [Planetiler](https://github.com/onthegomap/planetiler) from data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL) via Geofabrik; style, fonts and sprites from [OpenFreeMap](https://openfreemap.org/) Positron. Map libraries: MapLibre GL JS (BSD-3-Clause), MapLibre–Leaflet adapter (ISC) and PMTiles (BSD-3-Clause); their licenses are in `vendor/`. The visible attribution is retained on the map. Municipal boundaries: CONABIO, 2023. The simplified fallback also uses Natural Earth highways and built-up areas. Listing text is summarized from the two source sites; all listings belong to their advertisers.
