@@ -527,11 +527,11 @@ $("boundaries").addEventListener("change", function(){
 
 /* Street basemap. It draws beneath the Leaflet overlays. Everything it needs is served from this
    site: the map libraries in vendor/ (npm run vendor) and the tiles, style, fonts and sprites in
-   basemap/ (npm run build:basemap). The libraries load only when WebGL is available, after the
+   basemap/ (npm run build:basemap). The libraries load only when WebGL2 is available, after the
    listings are already usable, and the embedded simplified map stays on screen until the streets
    have rendered once. */
-var MAPLIBRE_CSS = "vendor/maplibre-gl-5.6.1/maplibre-gl.css";
-var MAPLIBRE_JS = "vendor/maplibre-gl-5.6.1/maplibre-gl.js";
+var MAPLIBRE_CSS = "vendor/maplibre-gl-6.19.0/maplibre-gl.css";
+var MAPLIBRE_JS = "vendor/maplibre-gl-6.19.0/maplibre-gl.mjs";
 var ADAPTER_JS = "vendor/maplibre-gl-leaflet-0.1.4/leaflet-maplibre-gl.js";
 var PMTILES_JS = "vendor/pmtiles-4.5.0/pmtiles.js";
 var STREET_STYLE = "basemap/style.json";
@@ -548,9 +548,9 @@ var StreetAdapter = null, streetMaplibre = null; // the adapter class and the ru
 var slowTimer = null, slowLeft = null, slowSince = 0; // visible ms left before the slow message; null once shown or stopped
 var retryTilesNow = null; // set by the current street layer while failed tiles wait for a retry
 
-function hasWebGL(){
+function hasWebGL2(){
   try {
-    var c = document.createElement("canvas"), ctx = c.getContext("webgl2") || c.getContext("webgl");
+    var c = document.createElement("canvas"), ctx = c.getContext("webgl2");
     var lose = ctx && ctx.getExtension("WEBGL_lose_context");
     if (lose) lose.loseContext();
     return !!ctx;
@@ -584,10 +584,32 @@ function request(url, fresh){
   });
   return r.promise;
 }
-// Resolves once the stylesheet has applied, all three scripts have run and the pmtiles:// protocol
-// that reads basemap/oaxaca.pmtiles is registered.
+// MapLibre 6 is ESM-only. Successful imports are reused; Retry gives a stalled import a new URL.
+// An abandoned import may still finish, so only the active one may publish the adapter's runtime.
+var moduleRequest = null;
+function loadMaplibreModule(fresh){
+  if (streetMaplibre) return Promise.resolve(streetMaplibre);
+  var r = moduleRequest;
+  if (r && (r.done || !fresh)) return r.promise;
+  var url = new URL(MAPLIBRE_JS, document.baseURI);
+  if (fresh) url.searchParams.set("_streetRetry", Date.now().toString(36) + "-" + (++requestSerial));
+  r = moduleRequest = {done:false};
+  r.promise = import(url.href).then(function(runtime){
+    if (moduleRequest !== r) throw new Error("Street module attempt superseded");
+    if (typeof runtime.Map !== "function") throw new Error("MapLibre module did not load");
+    r.done = true;
+    window.maplibregl = runtime;
+    return runtime;
+  }).catch(function(e){
+    if (moduleRequest === r) moduleRequest = null;
+    throw e;
+  });
+  return r.promise;
+}
+// Resolves once the stylesheet, module and classic adapter/PMTiles scripts have loaded and the
+// pmtiles:// protocol that reads basemap/oaxaca.pmtiles is registered.
 function loadMaplibre(fresh){
-  var js = (window.maplibregl ? Promise.resolve() : request(MAPLIBRE_JS, fresh))
+  var js = loadMaplibreModule(fresh)
     .then(function(){
       // The adapter binds to window.maplibregl when it runs, so never load it without one.
       if (!window.maplibregl) { var e = new Error("MapLibre did not run"); e.unsupported = true; throw e; }
@@ -713,7 +735,7 @@ function streetsReady(layer){
 }
 function addStreetLayer(style){
   var Layer = streetLayerClass();
-  var layer = new Layer({style:style, interactive:false, attributionControl:false});
+  var layer = new Layer({style:style, interactive:false, attributionControl:false, zoomLevelsToOverscale:undefined});
   streetLayer = layer;
   setCredits();
   layer.addTo(map);
@@ -788,7 +810,7 @@ function loadStreets(fresh){
   if (streetPhase === "loading" || streetPhase === "ready") return;
   // Browsers won't let a page opened from disk fetch the tile archive or style.
   if (location.protocol === "file:") { streetStatus("The street map needs the page served over HTTP (see the README). Showing a simplified map.", false); return; }
-  if (!hasWebGL()) { streetStatus("Street map needs WebGL, which isn't available here. Showing a simplified map.", false); return; }
+  if (!hasWebGL2()) { streetStatus("Street map needs WebGL2, which isn't available here. Showing a simplified map.", false); return; }
   var attempt = ++streetAttempt;
   streetPhase = "loading";
   streetStatus("Loading streets…", false);
@@ -809,7 +831,7 @@ new ResizeObserver(fitKey).observe(map.attributionControl.getContainer());
 window.addEventListener("online", function(){ if (retryTilesNow) retryTilesNow(); });
 $("map-retry").addEventListener("click", function(){
   // Check first: a paused street layer can still restore itself if WebGL is only briefly unavailable.
-  if (!hasWebGL()) { streetStatus("WebGL isn't available right now. Showing a simplified map.", true); return; }
+  if (!hasWebGL2()) { streetStatus("WebGL2 isn't available right now. Showing a simplified map.", true); return; }
   dropStreets();
   loadStreets(true);
 });

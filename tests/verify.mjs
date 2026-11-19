@@ -15,7 +15,7 @@ import { runRecovery } from './recovery.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'test-results');
-const GROUPS = ['align', 'ready', 'selfhost', 'file', 'dark', 'libs', 'archive', 'nowebgl', 'ctorfail', 'boundaries', 'phone', 'slow', 'recovery'];
+const GROUPS = ['align', 'ready', 'runtime', 'selfhost', 'file', 'dark', 'libs', 'archive', 'nowebgl', 'ctorfail', 'boundaries', 'phone', 'slow', 'recovery'];
 const ONLY = process.argv[2] ? process.argv[2].split(',') : GROUPS.filter(g => g !== 'recovery' || !process.env.BASE_URL);
 
 // Requests the checks block or delay to simulate failures.
@@ -86,6 +86,33 @@ const waitReady = (page, t = 60000) => page.waitForFunction(() => document.getEl
 const waitRetry = (page, t = 30000) => page.waitForFunction(() => !document.getElementById('map-retry').hidden, null, { timeout: t });
 const shot = (page, name) => page.screenshot({ path: path.join(OUT, name + '.png') });
 const url = () => BASE + 'index.html';
+
+// Hold just the first archive-header request. Delaying every Range request adds a second serial
+// delay for the tiles and makes a recovery deadline depend on decoding and rendering speed.
+function archiveHeaderGate() {
+  let release, requested, first = true;
+  const held = new Promise(resolve => { release = resolve; });
+  const seen = new Promise(resolve => { requested = resolve; });
+  return {
+    release,
+    route: [NET.slow, async route => {
+      if (first && /^bytes=0-/.test(route.request().headers().range || '')) {
+        first = false;
+        requested();
+        await held;
+      }
+      await route.continue().catch(() => {});
+    }],
+    async waitForRequest() {
+      let timer;
+      try {
+        await Promise.race([seen, new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('The archive-header request never arrived')), 15000);
+        })]);
+      } finally { clearTimeout(timer); }
+    },
+  };
+}
 
 const checks = {
   async recovery(browser) {
@@ -171,6 +198,47 @@ const checks = {
     await page.waitForTimeout(500);
     record('removing the layer mid-resize throws nothing', !page.errors.length, page.errors.join(' | '));
     await ctx.close();
+  },
+
+  async runtime(browser) {
+    const { ctx, page } = await newPage(browser);
+    try {
+      await page.goto(url());
+      await waitReady(page);
+      const version = await page.evaluate(() => window.maplibregl.getVersion());
+      record('runtime: the page loads MapLibre GL JS 6.19.0', version === '6.19.0', 'version=' + version);
+
+      // Exercise the public attribution control without changing the page's Leaflet credits.
+      // In 5.6.1, removing one attribute skipped its adjacent dangerous attribute.
+      const sanitized = await withGL(page, async gl => {
+        const control = new window.maplibregl.AttributionControl({ compact: false, customAttribution:
+          '<span class="sanitizer-handlers" onclick="window.__attributionHandlerExecuted=true" onmouseover="window.__attributionHandlerExecuted=true">handlers</span> ' +
+          '<a class="sanitizer-encoded" onclick="window.__attributionHandlerExecuted=true" href="jav&#x61;script:window.__attributionUrlExecuted=true">encoded</a> ' +
+          '<a class="sanitizer-legit" href="https://example.com/credits">legitimate credit</a>' });
+        try {
+          gl.addControl(control);
+          const handlers = gl.getContainer().querySelector('.sanitizer-handlers');
+          const encoded = gl.getContainer().querySelector('.sanitizer-encoded');
+          handlers.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          handlers.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+          encoded.click();
+          await new Promise(resolve => setTimeout(resolve, 50));
+          return {
+            eventAttributes: [handlers, encoded].flatMap(node => [...node.attributes].map(a => a.name).filter(name => /^on/i.test(name))),
+            handlerExecuted: window.__attributionHandlerExecuted === true,
+            encodedHref: encoded.getAttribute('href'),
+            urlExecuted: window.__attributionUrlExecuted === true,
+            legitimateHref: gl.getContainer().querySelector('.sanitizer-legit').href,
+          };
+        } finally {
+          gl.removeControl(control);
+          delete window.__attributionHandlerExecuted;
+          delete window.__attributionUrlExecuted;
+        }
+      });
+      record('runtime: attribution sanitization removes consecutive dangerous attributes', !sanitized.eventAttributes.length && !sanitized.handlerExecuted, JSON.stringify(sanitized));
+      record('runtime: attribution sanitization removes encoded executable URLs and keeps HTTPS links', sanitized.encodedHref === null && !sanitized.urlExecuted && sanitized.legitimateHref === 'https://example.com/credits', JSON.stringify(sanitized));
+    } finally { await ctx.close(); }
   },
 
   async selfhost(browser) {
@@ -290,6 +358,25 @@ const checks = {
     const libReqs = reqs.filter(u => /maplibre|pmtiles/.test(u)).length;
     record('no WebGL: no MapLibre download, WebGL message, no Retry', !libReqs && /WebGL/.test(p.status) && !p.retry && /Natural Earth/.test(p.credits), `status "${p.status}", library requests ${libReqs}`);
     await ctx.close();
+
+    // MapLibre 6 requires WebGL2. A browser with only WebGL1 should take the capability fallback
+    // before downloading the runtime, rather than repeatedly attempting a failing constructor.
+    const webgl1Only = () => {
+      const orig = HTMLCanvasElement.prototype.getContext;
+      window.__webgl1Available = !!document.createElement('canvas').getContext('webgl');
+      HTMLCanvasElement.prototype.getContext = function (t, ...a) { return t === 'webgl2' ? null : orig.call(this, t, ...a); };
+    };
+    const only1 = await newPage(browser, { init: webgl1Only });
+    try {
+      const requests = []; only1.page.on('request', r => requests.push(r.url()));
+      await only1.page.goto(url());
+      await only1.page.waitForFunction(() => /WebGL/.test(document.getElementById('map-status-text').textContent));
+      const fallback = await probe(only1.page);
+      const available = await only1.page.evaluate(() => window.__webgl1Available);
+      const libraries = requests.filter(u => /maplibre|pmtiles/.test(u)).length;
+      record('WebGL1 only: capability fallback keeps pins without downloading MapLibre', available && !libraries && !fallback.hasLayer && !fallback.ready && !fallback.retry && /WebGL/.test(fallback.status) && /Natural Earth/.test(fallback.credits) && await only1.page.locator('.pin-host:not([hidden])').count() > 0 && !only1.page.errors.length,
+        `WebGL1=${available}, library requests ${libraries}, status "${fallback.status}"`);
+    } finally { await only1.ctx.close(); }
   },
 
   async ctorfail(browser) {
@@ -351,35 +438,51 @@ const checks = {
   },
 
   async slow(browser) {
-    // Delay a basemap request past the 20 s slow threshold.
-    const delay = ms => [NET.slow, async r => { await new Promise(res => setTimeout(res, ms)); await r.continue().catch(() => {}); }];
     const fakeHidden = () => {
       window.__hidden = true;
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.__hidden });
       Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => window.__hidden ? 'hidden' : 'visible' });
     };
     const hidden = (async () => {
-      const { ctx, page } = await newPage(browser, { init: fakeHidden, routes: [delay(26000)] });
-      await page.goto(url());
-      await page.waitForTimeout(23000);
-      const mid = await probe(page);
-      await page.evaluate(() => { window.__hidden = false; document.dispatchEvent(new Event('visibilitychange')); });
-      await waitReady(page, 30000).catch(() => {});
-      const end = await probe(page);
-      record('hidden tab: no teardown or slow message after 23 s; streets load once visible', mid.status === 'Loading streets…' && end.ready && !end.status, `at 23 s "${mid.status}", then ready=${end.ready}`);
-      await ctx.close();
+      const gate = archiveHeaderGate();
+      const { ctx, page } = await newPage(browser, { init: fakeHidden, routes: [gate.route] });
+      try {
+        await page.goto(url());
+        await gate.waitForRequest();
+        await page.waitForTimeout(23000);
+        const mid = await probe(page);
+        record('hidden tab: no teardown, slow message or Retry after 23 s', mid.status === 'Loading streets…' && !mid.retry && !mid.ready && mid.hasLayer, `at 23 s "${mid.status}", Retry=${mid.retry}`);
+        await page.evaluate(() => { window.__hidden = false; document.dispatchEvent(new Event('visibilitychange')); });
+        gate.release();
+        await waitReady(page, 60000);
+        const end = await probe(page);
+        record('hidden tab: releasing the header loads the streets once visible', end.ready && !end.status && !page.errors.length, `ready=${end.ready}, errors=${page.errors.length}`);
+      } finally { gate.release(); await ctx.close(); }
     })();
     const visible = (async () => {
-      const { ctx, page } = await newPage(browser, { routes: [delay(26000)] });
-      await page.goto(url());
-      await page.waitForTimeout(23000);
-      const mid = await probe(page);
-      await waitReady(page, 30000).catch(() => {});
-      const end = await probe(page);
-      record('slow load: message with Retry at 20 s, then the streets swap in', /slow/.test(mid.status) && mid.retry && end.ready && !end.status, `at 23 s "${mid.status}", then ready=${end.ready}`);
-      await ctx.close();
+      const gate = archiveHeaderGate();
+      const { ctx, page } = await newPage(browser, { routes: [gate.route] });
+      try {
+        await page.goto(url());
+        await gate.waitForRequest();
+        await page.waitForFunction(() => /slow/.test(document.getElementById('map-status-text').textContent) && !document.getElementById('map-retry').hidden, null, { timeout: 30000 });
+        const rows = await page.locator('#list .row').count();
+        await page.locator('label:has(#src-pc)').click();
+        const filtered = await page.locator('#list .row').count();
+        await page.locator('#list .row-btn').first().click();
+        await page.locator('.leaflet-popup').waitFor({ state: 'visible' });
+        const mid = await probe(page);
+        const pins = await page.locator('.pin-host:not([hidden])').count();
+        record('slow load: message and Retry appear while the simplified map, filters, listings and pins work', /slow/.test(mid.status) && mid.retry && !mid.ready && /Natural Earth/.test(mid.credits) && filtered > 0 && filtered < rows && pins > 0 && await page.locator('.leaflet-popup').count() > 0,
+          `status "${mid.status}", rows ${rows}→${filtered}, pins=${pins}`);
+        gate.release();
+        await waitReady(page, 60000);
+        const end = await probe(page);
+        record('slow load: releasing the header swaps in the streets without Retry', end.ready && !end.status && !page.errors.length, `ready=${end.ready}, errors=${page.errors.length}`);
+      } finally { gate.release(); await ctx.close(); }
     })();
-    await Promise.all([hidden, visible]);
+    const completed = await Promise.allSettled([hidden, visible]);
+    for (const result of completed) if (result.status === 'rejected') throw result.reason;
   },
 };
 
