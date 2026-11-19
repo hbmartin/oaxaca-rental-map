@@ -542,7 +542,7 @@ var SHOW_PLACE = ["!", ["all", ["==", ["get", "class"], "city"], ["in", ["get", 
 var SLOW_MS = 20000, TILE_RETRY_MIN = 2000, TILE_RETRY_MAX = 60000;
 var streetCredit = '<a href="https://openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>';
 var pmtilesProtocol = null;
-// streetPhase: "off" (none, failed or unsupported), "loading", "ready", or "lost" (WebGL context lost; the layer may restore itself)
+// streetPhase: "off" (none, failed or unsupported), "loading", "ready", or "lost" (context/worker recovery, including reconstruction after restoration)
 var streetPhase = "off", streetLayer = null, streetAttempt = 0, StreetLayer = null;
 var StreetAdapter = null, streetMaplibre = null; // the adapter class and the runtime its factory captured
 var slowTimer = null, slowLeft = null, slowSince = 0; // visible ms left before the slow message; null once shown or stopped
@@ -726,10 +726,10 @@ function dropStreets(){
   if (streetLayer) { var old = streetLayer; streetLayer = null; old.remove(); }
   setCredits();
 }
-function streetFallback(message, retry){
+function streetFallback(){
   dropStreets();
   showSimplified(true);
-  streetStatus(message || "Streets unavailable. Showing a simplified map.", retry !== false);
+  streetStatus("Streets unavailable. Showing a simplified map.", true);
 }
 function streetsReady(layer){
   if (streetLayer !== layer) return;
@@ -741,8 +741,9 @@ function streetsReady(layer){
 function addStreetLayer(style){
   // Context restoration and worker restarts rebuild an already-filtered style snapshot.
   // Keep the original filters so every style.load applies the city exclusion exactly once.
-  var placeFilters = Object.create(null);
+  var placeFilters = Object.create(null), geometryLayers = [];
   style.layers.forEach(function(l){
+    if (l.type === "fill" || l.type === "line") geometryLayers.push(l.id);
     if (l.type === "symbol" && l["source-layer"] === "place") {
       placeFilters[l.id] = l.filter ? JSON.parse(JSON.stringify(l.filter)) : null;
     }
@@ -766,6 +767,20 @@ function addStreetLayer(style){
   });
   // Ready means drawn, including after MapLibre rebuilds the style on context or worker recovery.
   var contextLost = false, hasRendered = false, awaitingReady = true;
+  function usableVisibleGeometry(){
+    // The adapter pads its canvas beyond Leaflet's viewport. Query only the visible map,
+    // and require painted geometry so hidden labels or transparent features cannot qualify.
+    var bounds = map.getBounds();
+    return gl.queryRenderedFeatures([
+      gl.project(bounds.getNorthWest()), gl.project(bounds.getSouthEast())
+    ], {layers:geometryLayers}).some(function(feature){
+      var l = feature.layer, paint = l.paint || {}, opacity = paint[l.type + "-opacity"];
+      var color = paint[l.type + "-color"], alpha = color == null ? 1 : color.a, width = paint["line-width"];
+      if (opacity == null) opacity = 1;
+      if (width == null) width = 1;
+      return opacity > 0 && alpha > 0 && (l.type !== "line" || width > 0);
+    });
+  }
 
   // MapLibre never re-requests a failed tile while it stays in view, and the simplified map is gone by then,
   // so failed tiles are refreshed here, waiting longer after each round that still fails.
@@ -779,6 +794,9 @@ function addStreetLayer(style){
       try { gl.refreshTiles(source, tiles); } catch (err) { console.warn("Street tile retry failed", err); }
     });
     retryDelay = Math.min(retryDelay * 2, TILE_RETRY_MAX);
+    // Out-of-view coordinates may make refreshTiles a no-op. Request one frame so idle
+    // can still reconsider a fully drawn viewport after the retry queue has been drained.
+    if (streetLayer === layer && !contextLost) gl.triggerRepaint();
   }
   function queueTileRetry(e){
     var c = e.tile.tileID.canonical, tiles = failedTiles[e.sourceId] || (failedTiles[e.sourceId] = {});
@@ -786,12 +804,13 @@ function addStreetLayer(style){
     if (!retryTimer) retryTimer = setTimeout(retryTiles, retryDelay);
     retryTilesNow = function(){ if (retryTimer) retryTiles(); };
   }
-  // Idle and areTilesLoaded also count errored tiles as settled. Keep the fallback until
-  // queued retries finish successfully, and keep listening after an idle that was not ready.
+  // Idle and areTilesLoaded also count errored tiles as settled. After reconstruction,
+  // useful visible geometry can restore a partial map while failed tiles keep their backoff.
   gl.on("idle", function(){
-    if (contextLost || streetLayer !== layer || retryTimer || Object.keys(failedTiles).length || !gl.areTilesLoaded()) return;
-    retryDelay = TILE_RETRY_MIN;
-    if (awaitingReady) {
+    if (contextLost || streetLayer !== layer || !gl.areTilesLoaded()) return;
+    var fullyRecovered = !retryTimer && Object.keys(failedTiles).length === 0;
+    if (fullyRecovered) retryDelay = TILE_RETRY_MIN;
+    if (awaitingReady && (fullyRecovered || (hasRendered && usableVisibleGeometry()))) {
       awaitingReady = false;
       hasRendered = true;
       streetsReady(layer);
@@ -815,7 +834,7 @@ function addStreetLayer(style){
     failedTiles = {};
     retryTilesNow = null;
     // While loading too, so the page neither declares a blank canvas ready nor blames the network.
-    if (streetPhase !== "ready" && streetPhase !== "loading") return;
+    if (streetPhase !== "ready" && streetPhase !== "loading" && streetPhase !== "lost") return;
     stopSlowClock();
     streetPhase = "lost";
     showSimplified(true);
@@ -825,6 +844,7 @@ function addStreetLayer(style){
     if (streetLayer !== layer) return;
     contextLost = false;
     awaitingReady = true;
+    streetStatus("Recovering streets. Showing a simplified map.", true);
   });
 }
 function loadStreets(fresh){
