@@ -10,6 +10,7 @@ const MAPLIBRE_PATH = '/vendor/maplibre-gl-6.19.0/maplibre-gl.mjs';
 const MAPLIBRE_DIR = '/vendor/maplibre-gl-6.19.0/';
 const ARCHIVE_PATH = '/basemap/oaxaca.pmtiles';
 const TILE_PATH = '/recovery-tiles/';
+const PMTILES_PATH = '/vendor/pmtiles-4.5.0/pmtiles.js';
 const WAIT = 12000;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(test, message, timeout = WAIT) {
@@ -18,6 +19,11 @@ async function until(test, message, timeout = WAIT) {
     if (Date.now() >= end) throw new Error(message);
     await sleep(20);
   }
+}
+function replaceOnce(source, pattern, replacement) {
+  const matches = typeof pattern === 'string' ? source.split(pattern).length - 1 : [...source.matchAll(new RegExp(pattern.source, 'g'))].length;
+  assert.equal(matches, 1, `fixture replacement must match exactly once: ${pattern}`);
+  return source.replace(pattern, replacement);
 }
 function send(res, code, type, body) {
   res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store' });
@@ -79,19 +85,28 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
   const app = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const css = fs.readFileSync(path.join(root, CSS_PATH));
   const leaflet = path.join(root, 'node_modules/leaflet/dist/leaflet.js');
+  const leafletVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).devDependencies.leaflet;
+  assert.match(leafletVersion, /^\d+\.\d+\.\d+$/, 'Leaflet must be a direct exact dependency pin');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'node_modules/leaflet/package.json'), 'utf8')).version, leafletVersion);
+  const leafletURL = `https://cdnjs.cloudflare.com/ajax/libs/leaflet/${leafletVersion}/leaflet.js`;
+  assert.equal([...app.matchAll(/<script\s+src="([^"]*leaflet[^"]*)"/g)].map(m => m[1]).join(), leafletURL, 'the page and local fixture must request the same pinned Leaflet');
 
-  async function run(name, test) {
-    const cleanup = [];
-    try {
-      const detail = await test(cleanup);
-      record('recovery: ' + name, true, detail);
-    } catch (error) {
-      record('recovery: ' + name, false, String(error.message || error));
-    } finally {
-      for (const fn of cleanup.reverse()) await fn().catch(() => {});
+  async function run(name, test, report = record) {
+    const scope = { cleanup: [], interceptorErrors: [] }, errors = [];
+    let detail;
+    try { detail = await test(scope); } catch (error) { errors.push(error); }
+    finally {
+      for (const fn of scope.cleanup.reverse()) {
+        try { await fn(); } catch (error) { errors.push(error); }
+      }
     }
+    errors.push(...scope.interceptorErrors);
+    // Interceptor and cleanup errors may arrive after assertions succeed. Record only once
+    // every response, browser context and server has been closed for this scenario.
+    report('recovery: ' + name, errors.length === 0,
+      errors.length ? errors.map(error => String(error.message || error)).join('; ') : detail);
   }
-  async function setup(cleanup, { intercept, html = app, init, style } = {}) {
+  async function setup(scope, { intercept, html = app, init, style } = {}) {
     const held = new Set(), requests = [];
     let base;
     const server = await startServer(root, 0, '127.0.0.1', (req, res) => {
@@ -100,19 +115,19 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
       if (url.pathname === '/index.html') { send(res, 200, 'text/html; charset=utf-8', html); return true; }
       if (url.pathname === '/basemap/style.json' && style) { send(res, 200, 'application/json', JSON.stringify(style(base))); return true; }
       return intercept ? intercept(req, res, url, held) : false;
-    });
+    }, { onInterceptError: error => scope.interceptorErrors.push(error) });
     base = `http://127.0.0.1:${server.address().port}`;
-    cleanup.push(async () => {
+    scope.cleanup.push(async () => {
       for (const res of held) res.destroy();
       server.closeAllConnections();
       await new Promise(resolve => server.close(resolve));
     });
     const { ctx, page } = await newPage(browser, { init, routes: [
-      ['https://cdnjs.cloudflare.com/**', route => route.fulfill({ path: leaflet, contentType: 'text/javascript' })],
+      [leafletURL, route => route.fulfill({ path: leaflet, contentType: 'text/javascript' })],
       ['https://fonts.googleapis.com/**', route => route.abort()],
       ['https://fonts.gstatic.com/**', route => route.abort()],
     ] });
-    cleanup.push(() => ctx.close());
+    scope.cleanup.push(() => ctx.close());
     // Long native stylesheet or module responses must not hold page.goto's load event open.
     await page.goto(base + '/index.html', { waitUntil: 'domcontentloaded' });
     return { page, ctx, base, held, requests };
@@ -179,7 +194,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
   await run('Retry bypasses a native stalled module import before its original response finishes', async cleanup => {
     let original, imports = 0;
     const f = await setup(cleanup, {
-      html: app.replace(/SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
+      html: replaceOnce(app, /SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
       intercept(req, res, url, held) {
         if (url.pathname !== MAPLIBRE_PATH) return false;
         if (++imports === 1) {
@@ -207,7 +222,6 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
   await run('a blocked same-origin module worker leaves a fallback and recovers on Retry', async cleanup => {
     let blocked = true, workerRequests = 0;
     const f = await setup(cleanup, {
-      html: app.replace(/SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
       init: () => {
         const NativeWorker = window.Worker;
         window.__recoveryWorkers = [];
@@ -228,6 +242,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     });
     await until(() => workerRequests > 0, 'the fixture must block an actual HTTP module-worker request');
     await waitRetry(f.page, WAIT);
+    assert.match((await probe(f.page)).status, /unavailable/, 'a worker HTTP failure must fail, rather than merely reach the slow message');
     await usableFallback(f.page);
     blocked = false;
     await f.page.click('#map-retry');
@@ -244,7 +259,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
   await run('Retry bypasses a native stalled CSS response and reuses successful scripts', async cleanup => {
     let original, cssRequests = 0;
     const f = await setup(cleanup, {
-      html: app.replace(/SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
+      html: replaceOnce(app, /SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
       intercept(req, res, url, held) {
         if (url.pathname !== CSS_PATH) return false;
         cssRequests++;
@@ -259,7 +274,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     await waitRetry(f.page, WAIT);
     await f.page.waitForFunction(() => window.maplibregl && L.MaplibreGL && window.pmtiles, null, { timeout: WAIT });
     const before = scriptRequests(f).length;
-    assert.ok(before >= 3, 'the runtime modules, adapter and PMTiles should have succeeded before Retry');
+    assert.equal(before, 3, 'exactly the entry, adapter and PMTiles must have loaded before Retry');
     await f.page.click('#map-retry');
     await waitReady(f.page, WAIT);
     const after = scriptRequests(f).length;
@@ -275,7 +290,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
   await run('Retry stays independent of a stalled CSS response after an intervening 503', async cleanup => {
     let original, count = 0;
     const f = await setup(cleanup, {
-      html: app.replace(/SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
+      html: replaceOnce(app, /SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
       intercept(req, res, url, held) {
         if (url.pathname !== CSS_PATH) return false;
         count++;
@@ -321,7 +336,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
   await run('CSS retry preserves an existing query and fragment', async cleanup => {
     let count = 0;
     const f = await setup(cleanup, {
-      html: app.replace('maplibre-gl.css";', 'maplibre-gl.css?existing=1#test";').replace(/SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
+      html: replaceOnce(replaceOnce(app, 'maplibre-gl.css";', 'maplibre-gl.css?existing=1#test";'), /SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
       intercept(req, res, url, held) {
         if (url.pathname !== CSS_PATH) return false;
         count++;
@@ -377,7 +392,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
   await run('a late abandoned module cannot replace the adapter runtime or detach Retry from its protocol cache', async cleanup => {
     let originalScript, scriptRequests = 0, archiveRequests = 0;
     const f = await setup(cleanup, {
-      html: app.replace(/SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
+      html: replaceOnce(app, /SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
       style: base => fixtureStyle(base, { type: 'vector', url: 'pmtiles://basemap/oaxaca.pmtiles' }),
       intercept(req, res, url, held) {
         if (url.pathname === MAPLIBRE_PATH && ++scriptRequests === 1) {
@@ -445,6 +460,210 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     await waitReady(f.page, WAIT);
     cleanPage(f.page);
     return 'successful metadata cannot hide the fallback while the context is lost; restoration reaches ready';
+  });
+
+  await run('a late classic-script Retry cannot replace the working PMTiles protocol or archive cache', async cleanup => {
+    let scripts = 0, lateScript, headers = 0, archiveRequests = 0, rejectNewHeaders = false;
+    const captureProtocols = () => {
+      let exported;
+      window.__recoveryProtocols = [];
+      Object.defineProperty(window, 'pmtiles', { configurable: true, get: () => exported, set(value) {
+        const NativeProtocol = value.Protocol;
+        const Protocol = class extends NativeProtocol {
+          constructor(...args) { super(...args); window.__recoveryProtocols.push(this); }
+        };
+        exported = { ...value, Protocol };
+      } });
+    };
+    const f = await setup(cleanup, {
+      html: replaceOnce(app, /SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
+      init: captureProtocols,
+      style: base => fixtureStyle(base, { type: 'vector', url: 'pmtiles://basemap/oaxaca.pmtiles' }),
+      intercept(req, res, url, held) {
+        if (url.pathname === PMTILES_PATH) {
+          if (++scripts === 1) { send(res, 503, 'text/javascript', 'initial PMTiles script failure'); return true; }
+          if (scripts === 2) {
+            lateScript = res; held.add(res);
+            res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'public,max-age=31536000' });
+            res.flushHeaders(); return true;
+          }
+        }
+        if (url.pathname === ARCHIVE_PATH) {
+          archiveRequests++;
+          if (/^bytes=0-/.test(req.headers.range || '')) {
+            headers++;
+            if (rejectNewHeaders) { send(res, 503, 'text/plain', 'a discarded archive cache cannot recover this header'); return true; }
+          }
+        }
+        return false;
+      },
+    });
+    await f.page.waitForFunction(() => /unavailable/.test(document.getElementById('map-status-text').textContent), null, { timeout: WAIT });
+    assert.equal(scripts, 1, 'the initial attempt must have received the PMTiles script 503');
+    await f.page.click('#map-retry');
+    await until(() => lateScript, 'Retry #2 must hold a real classic-script response');
+    await f.page.locator('script[src*="/pmtiles-4.5.0/pmtiles.js"]').evaluate(element => {
+      element.addEventListener('load', () => { window.__latePMTilesOnload = true; });
+    });
+    await waitRetry(f.page, WAIT);
+    await f.page.click('#map-retry');
+    await waitReady(f.page, WAIT);
+    await allLoaded(f.page);
+    assert.equal(scripts, 3);
+    assert.equal(headers, 1, 'the winning protocol must have a successful cached archive header');
+    await f.page.evaluate(base => {
+      window.__winningProtocol = __recoveryProtocols.at(-1);
+      window.__winningArchive = __winningProtocol.get(base + '/basemap/oaxaca.pmtiles');
+      if (!__winningArchive) throw new Error('winning PMTiles archive was not cached');
+    }, f.base);
+    const protocols = await f.page.evaluate(() => __recoveryProtocols.length);
+    rejectNewHeaders = true;
+    assert.equal(lateScript.destroyed, false, 'the abandoned classic response must still be pending after the replacement reaches ready');
+    lateScript.end(Buffer.concat([fs.readFileSync(path.join(root, PMTILES_PATH)), Buffer.from('\nwindow.__latePMTilesExecuted = true;\n')]));
+    // Observe the removed element's real load event as well as execution, then cross the
+    // event's microtask checkpoint so the abandoned loader continuation has also drained.
+    await f.page.waitForFunction(() => window.__latePMTilesExecuted && window.__latePMTilesOnload, null, { timeout: WAIT });
+    assert.equal(await f.page.evaluate(() => __recoveryProtocols.length), protocols, 'abandoned Retry #2 must not register a new protocol after Retry #3 is ready');
+    assert.ok(await f.page.evaluate(base => __winningProtocol === __recoveryProtocols.at(-1) &&
+      __winningProtocol.get(base + '/basemap/oaxaca.pmtiles') === __winningArchive, f.base));
+    const before = archiveRequests;
+    await f.page.evaluate(() => __map.setView([17.105, -96.705], 15, { animate: false }));
+    await until(() => archiveRequests > before, 'moving to uncached tiles must make actual archive range requests');
+    await allLoaded(f.page);
+    await waitReady(f.page, WAIT);
+    assert.equal(headers, 1, 'uncached tiles must retain the winning header cache even when a new header request would fail');
+    cleanPage(f.page);
+    return '503 → held Retry #2 → ready Retry #3; late classic execution preserves protocol/archive identity and uncached tiles load without a new header';
+  });
+
+  await run('errored tiles after WebGL reconstruction keep the fallback through native idle and recover on tile retry', async cleanup => {
+    let fail = false, tileRequests = 0;
+    const f = await setup(cleanup, { init: retryClock, style: base => fixtureStyle(base), intercept(req, res, url) {
+      if (!url.pathname.startsWith(TILE_PATH)) return false;
+      tileRequests++;
+      send(res, fail ? 503 : 200, 'application/x-protobuf', fail ? 'restored tile failure' : Buffer.alloc(0));
+      return true;
+    } });
+    await waitReady(f.page, WAIT);
+    await allLoaded(f.page);
+    await withGL(f.page, gl => {
+      window.__restoredIdle = [];
+      gl.on('idle', () => {
+        const tiles = gl.style?.tileManagers.fixture?._inViewTiles.getAllTiles() || [];
+        if (tiles.some(tile => tile.state === 'errored')) __restoredIdle.push({ loaded: gl.areTilesLoaded(), states: tiles.map(tile => tile.state) });
+      });
+    });
+    await loseContext(f.page);
+    fail = true;
+    const beforeRestore = tileRequests;
+    await f.page.evaluate(() => __recoveryLose.restoreContext());
+    await until(() => tileRequests > beforeRestore, 'the restored style must request new native tiles');
+    await f.page.waitForFunction(() => __restoredIdle.some(idle => idle.loaded), null, { timeout: WAIT });
+    await usableFallback(f.page);
+    assert.ok(await f.page.evaluate(() => __recoveryClock.timers.size > 0 && [...__recoveryClock.timers.values()].some(timer => timer.active)));
+    fail = false;
+    const beforeRetry = tileRequests;
+    await f.page.evaluate(() => __recoveryClock.fire());
+    await until(() => tileRequests > beforeRetry, 'the application tile retry must issue actual HTTP requests');
+    await allLoaded(f.page);
+    await waitReady(f.page, WAIT);
+    cleanPage(f.page);
+    return 'real context reconstruction plus tile 503s reaches native idle/areTilesLoaded without hiding the fallback; successful tile retry restores streets';
+  });
+
+  await run('place filters stay stable through real context restoration and two worker-pool restarts', async cleanup => {
+    const f = await setup(cleanup, { style: base => {
+      const style = fixtureStyle(base);
+      style.layers.push({ id: 'place-filter', type: 'symbol', source: 'fixture', 'source-layer': 'place',
+        filter: ['==', ['get', 'class'], 'city'], layout: { 'text-field': ['get', 'name'] } });
+      return style;
+    }, intercept(req, res, url) {
+      if (!url.pathname.startsWith(TILE_PATH)) return false;
+      send(res, 200, 'application/x-protobuf', Buffer.alloc(0)); return true;
+    } });
+    await waitReady(f.page, WAIT);
+    const original = await withGL(f.page, gl => gl.getFilter('place-filter'));
+    await withGL(f.page, gl => {
+      window.__recoveryRebuilds = { styles: 0, losses: [] };
+      gl.on('style.load', () => __recoveryRebuilds.styles++);
+      gl.on('webglcontextlost', event => __recoveryRebuilds.losses.push({
+        type: event.originalEvent.constructor.name, trusted: event.originalEvent.isTrusted,
+        contextLost: gl.getCanvas().getContext('webgl2').isContextLost(),
+      }));
+    });
+    await loseContext(f.page);
+    await f.page.evaluate(() => __recoveryLose.restoreContext());
+    await f.page.waitForFunction(() => __recoveryRebuilds.styles >= 1, null, { timeout: WAIT });
+    await waitReady(f.page, WAIT);
+    assert.deepEqual(await withGL(f.page, gl => gl.getFilter('place-filter')), original);
+    for (let restart = 0; restart < 2; restart++) {
+      await f.page.evaluate(() => maplibregl.getGlobalDispatcher().workerPool.restart());
+      await f.page.waitForFunction(n => __recoveryRebuilds.styles >= n, restart + 2, { timeout: WAIT });
+      await waitReady(f.page, WAIT);
+      assert.deepEqual(await withGL(f.page, gl => gl.getFilter('place-filter')), original, 'reconstruction must not append another exclusion expression');
+      assert.ok((await probe(f.page)).ready, 'worker replacement must recover automatically without clicking Retry');
+    }
+    const rebuilds = await f.page.evaluate(() => __recoveryRebuilds);
+    assert.equal(rebuilds.losses.length, 3);
+    assert.ok(rebuilds.losses[0].trusted && rebuilds.losses[0].contextLost, 'the first cycle must use an actual lost WebGL context');
+    assert.ok(rebuilds.losses.slice(1).every(event => event.type === 'Event' && !event.trusted && !event.contextLost),
+      'both worker restarts must fire MapLibre synthetic events while WebGL remains healthy');
+    cleanPage(f.page);
+    return 'one native WebGL restoration and two actual worker-pool replacements automatically reach ready with byte-identical place filters';
+  });
+
+  await run('context reconstruction discards pending retry work before a viewport change', async cleanup => {
+    let fail = false, tileRequests = 0;
+    const f = await setup(cleanup, { init: retryClock, style: base => fixtureStyle(base), intercept(req, res, url) {
+      if (!url.pathname.startsWith(TILE_PATH)) return false;
+      tileRequests++;
+      send(res, fail ? 503 : 200, 'application/x-protobuf', fail ? 'queued before context loss' : Buffer.alloc(0));
+      return true;
+    } });
+    await waitReady(f.page, WAIT);
+    fail = true;
+    await withGL(f.page, gl => gl.refreshTiles('fixture'));
+    await f.page.waitForFunction(() => [...__recoveryClock.timers.values()].some(timer => timer.active), null, { timeout: WAIT });
+    await loseContext(f.page);
+    assert.ok(await f.page.evaluate(() => [...__recoveryClock.timers.values()].every(timer => !timer.active)), 'the old tile retry timer must be cleared on loss');
+    const beforeOnline = tileRequests;
+    await f.page.evaluate(() => { __map.setView([17.10, -96.70], 14, { animate: false }); dispatchEvent(new Event('online')); });
+    await f.page.waitForTimeout(100);
+    assert.equal(tileRequests, beforeOnline, 'online must not refresh a discarded style or replay old tile coordinates');
+    fail = false;
+    await f.page.evaluate(() => __recoveryLose.restoreContext());
+    await waitReady(f.page, WAIT);
+    await allLoaded(f.page);
+    assert.ok(await f.page.evaluate(() => [...__recoveryClock.timers.values()].every(timer => !timer.active)), 'stale errors must not block the reconstructed viewport from becoming ready');
+    cleanPage(f.page);
+    return 'a queued real tile failure is cancelled by loss; online does no stale work, and the changed viewport reconstructs successfully';
+  });
+
+  await run('interceptor exceptions are recorded after cleanup and do not abort following cases', async () => {
+    const privateResults = [], report = (...result) => privateResults.push(result);
+    for (const afterHeaders of [false, true]) {
+      await run(afterHeaders ? 'private after-headers fixture error' : 'private before-headers fixture error', async scope => {
+        const f = await setup(scope, { intercept(req, res, url) {
+          if (url.pathname !== '/intentional-interceptor-error') return false;
+          if (afterHeaders) { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.write('partial response'); }
+          throw new Error(afterHeaders ? 'intentional error after headers' : 'intentional error before headers');
+        } });
+        const response = await f.page.request.get(f.base + '/intentional-interceptor-error').catch(error => error);
+        if (!afterHeaders) assert.equal(response.status(), 500);
+        else assert.ok(response instanceof Error, 'a partially written response must be destroyed');
+        scope.cleanup.push(async () => { scope.interceptorErrors.push(new Error('cleanup collector marker')); });
+        return 'the assertions succeeded, but the fixture must still fail';
+      }, report);
+    }
+    let followingCaseRan = false;
+    await run('private following case', async () => { followingCaseRan = true; return 'continued'; }, report);
+    assert.equal(privateResults.length, 3);
+    assert.deepEqual(privateResults.map(result => result[1]), [false, false, true]);
+    assert.match(privateResults[0][2], /intentional error before headers/);
+    assert.match(privateResults[1][2], /intentional error after headers/);
+    assert.ok(privateResults.slice(0, 2).every(result => /cleanup collector marker/.test(result[2])), 'results must include errors collected during cleanup');
+    assert.ok(followingCaseRan);
+    return 'private before/after-header exceptions produce failed records only after cleanup; the next scenario still runs';
   });
 
   await run('tile backoff survives an idle event during pending requests, caps, retries online and resets after recovery', async cleanup => {
