@@ -53,6 +53,20 @@ Listings live in the `LISTINGS` array inside the `<script>` near the bottom of `
 | `prec` | Uncertainty radius in metres |
 | `by` | How the pin was placed: `"street"`, `"landmark"` or `"area"` (omit for neighborhood) |
 
+## Tests
+
+`tests/verify.mjs` drives the page in headless Chromium and checks the street basemap end to end. It covers alignment while panning and zooming, credits, hidden labels, dark mode, failure and Retry paths (blocked libraries or style, no WebGL, a failing WebGL constructor, context loss), boundary toggling, the phone layout, and slow or background-tab loading.
+
+```sh
+npm install
+npx playwright install chromium   # once; or set PW_CHANNEL=chrome to use installed Google Chrome
+npm test                          # about 90 s; starts its own local server
+npm test -- ready,dark            # only some groups: align, ready, dark, libs, nowebgl, ctorfail, boundaries, phone, slow
+BASE_URL=https://example.org/map/ npm test   # against a deployed copy
+```
+
+Screenshots and `results.json` are written to `test-results/`. `npm run serve` starts the same local server on port 8766 for viewing the page.
+
 ## Credits
 
 Street basemap: OpenFreeMap Positron, © OpenMapTiles, data © OpenStreetMap contributors. The visible attribution is retained on the map. Municipal boundaries: CONABIO, 2023. The simplified fallback also uses Natural Earth highways and built-up areas. Listing text is summarized from the two source sites; all listings belong to their advertisers.
