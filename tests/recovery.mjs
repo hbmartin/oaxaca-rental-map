@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { PMTiles } from 'pmtiles';
 import { startServer } from '../scripts/serve.mjs';
 
 const CSS_PATH = '/vendor/maplibre-gl-6.19.0/maplibre-gl.css';
@@ -21,9 +22,11 @@ async function until(test, message, timeout = WAIT) {
   }
 }
 function replaceOnce(source, pattern, replacement) {
-  const matches = typeof pattern === 'string' ? source.split(pattern).length - 1 : [...source.matchAll(new RegExp(pattern.source, 'g'))].length;
+  const clone = flags => new RegExp(pattern.source, flags);
+  const matches = typeof pattern === 'string' ? source.split(pattern).length - 1 :
+    [...source.matchAll(clone(pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g'))].length;
   assert.equal(matches, 1, `fixture replacement must match exactly once: ${pattern}`);
-  return source.replace(pattern, replacement);
+  return source.replace(typeof pattern === 'string' ? pattern : clone(pattern.flags), replacement);
 }
 function send(res, code, type, body) {
   res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store' });
@@ -90,6 +93,17 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
   assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'node_modules/leaflet/package.json'), 'utf8')).version, leafletVersion);
   const leafletURL = `https://cdnjs.cloudflare.com/ajax/libs/leaflet/${leafletVersion}/leaflet.js`;
   assert.equal([...app.matchAll(/<script\s+src="([^"]*leaflet[^"]*)"/g)].map(m => m[1]).join(), leafletURL, 'the page and local fixture must request the same pinned Leaflet');
+  // Real committed MVT geometry, prepared before HTTP callbacks so interceptors remain synchronous.
+  const archiveBytes = fs.readFileSync(path.join(root, ARCHIVE_PATH));
+  const archive = new PMTiles({ getKey: () => 'local-recovery-archive', getBytes: async (offset, length) => ({
+    data: archiveBytes.buffer.slice(archiveBytes.byteOffset + offset, archiveBytes.byteOffset + Math.min(offset + length, archiveBytes.length)),
+  }) });
+  const geometryTiles = new Map();
+  for (let x = 945; x <= 950; x++) for (let y = 1849; y <= 1852; y++) {
+    const tile = await archive.getZxy(12, x, y);
+    assert.ok(tile?.data.byteLength, `the committed archive must contain geometry fixture 12/${x}/${y}`);
+    geometryTiles.set(`${TILE_PATH}12/${x}/${y}.pbf`, Buffer.from(tile.data));
+  }
 
   async function run(name, test, report = record) {
     const scope = { cleanup: [], interceptorErrors: [] }, errors = [];
@@ -144,7 +158,11 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     const row = page.locator('#list .row-btn').first();
     await row.click();
     assert.equal(await row.getAttribute('aria-expanded'), 'true', 'listings must remain usable while streets cannot load');
+    // Selection opens its popup from moveend. Let that callback finish before closing
+    // it, otherwise a later fixture pan can open the stale popup and auto-pan back.
+    await page.locator('.leaflet-popup').waitFor({ state: 'visible', timeout: WAIT });
     await row.click();
+    await page.evaluate(() => __map.stop());
   }
   const glExists = page => page.waitForFunction(() => {
     let found = false;
@@ -167,6 +185,93 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     const tiles = gl?.style?.tileManagers.fixture?._inViewTiles.getAllTiles();
     return tiles?.length && tiles.every(tile => tile.state === 'loaded');
   }, null, { timeout: WAIT });
+  const geometryStyle = (base, { linePaint = {}, fillPaint, lineLayout = {}, fillLayout = {} } = {}) => {
+    const style = fixtureStyle(base);
+    style.layers = [style.layers[0], { id: 'roads', type: 'line', source: 'fixture', 'source-layer': 'transportation', paint: linePaint, layout: lineLayout }];
+    if (fillPaint) style.layers.push({ id: 'land', type: 'fill', source: 'fixture', 'source-layer': 'landcover', paint: fillPaint, layout: fillLayout });
+    return style;
+  };
+  const waitErroredIdle = (page, count = 0) => page.waitForFunction(n => window.__recoverySettledErrors?.length > n, count, { timeout: WAIT });
+  async function observeErroredIdle(page) {
+    await withGL(page, gl => {
+      window.__recoverySettledErrors = [];
+      gl.on('idle', () => {
+        const tiles = gl.style?.tileManagers.fixture?._inViewTiles.getAllTiles() || [];
+        if (gl.areTilesLoaded() && tiles.some(tile => tile.state === 'errored')) __recoverySettledErrors.push(tiles.map(tile => tile.state));
+      });
+    });
+  }
+  const activeRetries = page => page.evaluate(() => [...__recoveryClock.timers.values()].filter(timer => timer.active).length);
+  const waitAligned = page => page.waitForFunction(() => {
+    let gl; __map.eachLayer(layer => { if (layer.getMaplibreMap) gl = layer.getMaplibreMap(); });
+    return gl && Math.abs(gl.getZoom() - (__map.getZoom() - 1)) < 0.001 &&
+      Math.abs(gl.getCenter().lng - __map.getCenter().lng) < 0.00001;
+  }, null, { timeout: WAIT });
+
+  await run('fixture replacements preserve regex flags and ignore the caller lastIndex', async () => {
+    const cases = [
+      ['aBc', /abc/i, 'done'],
+      ['first\nTARGET\nlast', /^TARGET$/m, 'first\ndone\nlast'],
+      ['first\nlast', /first.last/s, 'done'],
+      ['aBc', /abc/gi, 'done'],
+    ];
+    for (const [source, pattern, expected] of cases) {
+      pattern.lastIndex = 17;
+      assert.equal(replaceOnce(source, pattern, 'done'), expected);
+      assert.equal(pattern.lastIndex, 17, 'fixture validation/replacement must not mutate the original regex');
+    }
+    assert.throws(() => replaceOnce('other', /target/i, 'done'), /exactly once/);
+    assert.throws(() => replaceOnce('target TARGET', /target/gi, 'done'), /exactly once/);
+    assert.throws(() => replaceOnce('target\ntarget', /^target$/m, 'done'), /exactly once/);
+    return 'i/m/s/g flags survive; fresh regex clones start at zero; missing/multiple matches fail explicitly';
+  });
+
+  for (const trigger of ['timer', 'online']) await run(`an out-of-view tile retry requests a frame after its ${trigger} no-op`, async cleanup => {
+    let restored = false, failed = false, tileRequests = 0;
+    const f = await setup(cleanup, { init: retryClock, style: base => fixtureStyle(base), intercept(req, res, url) {
+      if (!url.pathname.startsWith(TILE_PATH)) return false;
+      tileRequests++;
+      const reject = restored && !failed && url.pathname === `${TILE_PATH}12/947/1850.pbf`;
+      if (reject) failed = true;
+      send(res, reject ? 503 : 200, 'application/x-protobuf', reject ? 'one restored tile failed' : Buffer.alloc(0));
+      return true;
+    } });
+    await waitReady(f.page, WAIT);
+    await observeErroredIdle(f.page);
+    await loseContext(f.page);
+    restored = true;
+    await f.page.evaluate(() => __recoveryLose.restoreContext());
+    await waitErroredIdle(f.page);
+    assert.ok(failed);
+    await usableFallback(f.page);
+    await f.page.evaluate(() => __map.setView([17.06, -96.56], 16, { animate: false }));
+    await waitAligned(f.page);
+    await allLoaded(f.page);
+    await withGL(f.page, gl => {
+      window.__emptyViewportIdle = false;
+      gl.once('idle', () => { __emptyViewportIdle = true; }); gl.triggerRepaint();
+    });
+    await f.page.waitForFunction(() => __emptyViewportIdle, null, { timeout: WAIT });
+    assert.ok(!(await probe(f.page)).ready, 'an empty but loaded viewport cannot qualify as useful partial geometry while retry work is queued');
+    assert.equal(await activeRetries(f.page), 1);
+    const viewport = await withGL(f.page, gl => ({ center: gl.getCenter(), leaflet: __map.getCenter(), zoom: __map.getZoom(),
+      tiles: gl.style.tileManagers.fixture._inViewTiles.getAllTiles().map(tile => [tile.tileID.canonical.x, tile.tileID.canonical.y, tile.state]) }));
+    assert.ok(viewport.tiles.every(tile => tile[0] !== 947 || tile[1] !== 1850),
+      'the queued failed coordinates must be outside even the padded GL viewport before testing the no-op: ' + JSON.stringify(viewport));
+    await withGL(f.page, gl => {
+      const refresh = gl.refreshTiles;
+      window.__noopRefreshCalls = [];
+      gl.refreshTiles = function(...args) { __noopRefreshCalls.push(args); return refresh.apply(this, args); };
+    });
+    const before = tileRequests;
+    await f.page.evaluate(trigger => trigger === 'timer' ? __recoveryClock.fire() : dispatchEvent(new Event('online')), trigger);
+    await waitReady(f.page, WAIT);
+    assert.equal(tileRequests, before, 'out-of-view coordinates must make refreshTiles a real no-op, without new HTTP tile requests');
+    assert.equal(await f.page.evaluate(() => __noopRefreshCalls.length), 1);
+    assert.equal(await activeRetries(f.page), 0);
+    cleanPage(f.page);
+    return `a native single-tile 503, pan to loaded empty tiles, and ${trigger} queue drain regain ready through a requested render frame`;
+  });
 
   await run('a blocked ESM entry leaves usable listings and imports successfully on Retry', async cleanup => {
     let imports = 0;
@@ -560,6 +665,12 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     await until(() => tileRequests > beforeRestore, 'the restored style must request new native tiles');
     await f.page.waitForFunction(() => __restoredIdle.some(idle => idle.loaded), null, { timeout: WAIT });
     await usableFallback(f.page);
+    assert.match((await probe(f.page)).status, /recovering/i, 'restoration must distinguish recovery work from an actually lost context');
+    await loseContext(f.page);
+    assert.match((await probe(f.page)).status, /paused/i, 'a repeated real loss during recovery must restore the paused message');
+    await f.page.evaluate(() => { __restoredIdle = []; __recoveryLose.restoreContext(); });
+    await f.page.waitForFunction(() => __restoredIdle.length > 0 && [...__recoveryClock.timers.values()].some(timer => timer.active), null, { timeout: WAIT });
+    assert.match((await probe(f.page)).status, /recovering/i);
     assert.ok(await f.page.evaluate(() => __recoveryClock.timers.size > 0 && [...__recoveryClock.timers.values()].some(timer => timer.active)));
     fail = false;
     const beforeRetry = tileRequests;
@@ -569,6 +680,137 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     await waitReady(f.page, WAIT);
     cleanPage(f.page);
     return 'real context reconstruction plus tile 503s reaches native idle/areTilesLoaded without hiding the fallback; successful tile retry restores streets';
+  });
+
+  for (const [kind, options, layer] of [['transportation', {}, 'roads'], ['polygon', { lineLayout: { visibility: 'none' }, fillPaint: {} }, 'land']]) {
+    await run(`visible real ${kind} geometry restores a partial map while tile backoff continues`, async cleanup => {
+    let partial = false, tileRequests = 0;
+    const f = await setup(cleanup, { init: retryClock, style: base => geometryStyle(base, options), intercept(req, res, url) {
+      if (!url.pathname.startsWith(TILE_PATH)) return false;
+      tileRequests++;
+      const reject = partial && url.pathname !== `${TILE_PATH}12/947/1850.pbf`;
+      send(res, reject ? 503 : 200, 'application/x-protobuf', reject ? 'partial restored viewport' : geometryTiles.get(url.pathname) || Buffer.alloc(0));
+      return true;
+    } });
+    await waitReady(f.page, WAIT);
+    await observeErroredIdle(f.page);
+    await loseContext(f.page);
+    partial = true;
+    await f.page.evaluate(() => __recoveryLose.restoreContext());
+    await waitErroredIdle(f.page);
+    await waitReady(f.page, WAIT);
+    const geometry = await withGL(f.page, (gl, layer) => {
+      const bounds = __map.getBounds();
+      return gl.queryRenderedFeatures([gl.project(bounds.getNorthWest()), gl.project(bounds.getSouthEast())], { layers: [layer] }).length;
+    }, layer);
+    assert.ok(geometry > 0, 'the successful central MVT must draw real geometry inside the Leaflet viewport, including default paint');
+    assert.equal(await activeRetries(f.page), 1, 'publishing a partial map must retain background tile retries');
+    for (let round = 0; round < 2; round++) {
+      const before = tileRequests;
+      await f.page.evaluate(() => __recoveryClock.fire());
+      await until(() => tileRequests > before, 'a partial map must continue real HTTP tile retries');
+      await f.page.waitForFunction(n => __recoveryClock.scheduled.length >= n, round + 2, { timeout: WAIT });
+      assert.ok((await probe(f.page)).ready, 'repeated tile failures must not hide already useful geometry');
+    }
+    assert.deepEqual(await f.page.evaluate(() => __recoveryClock.scheduled.slice(0, 3)), [2000, 4000, 8000], 'partial readiness must retain, rather than reset, the failure backoff');
+    partial = false;
+    await f.page.evaluate(() => __recoveryClock.fire());
+    await allLoaded(f.page);
+    await waitReady(f.page, WAIT);
+    assert.equal(await activeRetries(f.page), 0);
+    cleanPage(f.page);
+    return `real central ${kind} with default paint shows streets after reconstruction; other tile failures retry at 2/4/8 seconds until full recovery`;
+    });
+  }
+
+  const invisiblePaintCases = [
+    ['zero opacity fill and line', { linePaint: { 'line-opacity': 0 }, fillPaint: { 'fill-opacity': 0 } }],
+    ['transparent color fill and line', { linePaint: { 'line-color': 'rgba(30,30,30,0)' }, fillPaint: { 'fill-color': 'rgba(30,30,30,0)' } }],
+    ['zero width line with hidden fill', { linePaint: { 'line-width': 0 }, fillPaint: {}, fillLayout: { visibility: 'none' } }],
+    ['hidden fill and line', { lineLayout: { visibility: 'none' }, fillPaint: {}, fillLayout: { visibility: 'none' } }],
+  ];
+  for (const [name, options] of invisiblePaintCases) await run(`invisible real geometry cannot qualify a restored partial map: ${name}`, async cleanup => {
+    let partial = false;
+    const f = await setup(cleanup, { init: retryClock, style: base => {
+      const style = geometryStyle(base, options);
+      // A nonqualifying circle keeps the source active even when both geometry layers
+      // are hidden. The native tile failures must still occur in the hidden-layer case.
+      style.layers.push({ id: 'source-keeper', type: 'circle', source: 'fixture', 'source-layer': 'place', paint: { 'circle-opacity': 0 } });
+      return style;
+    }, intercept(req, res, url) {
+      if (!url.pathname.startsWith(TILE_PATH)) return false;
+      const reject = partial && url.pathname !== `${TILE_PATH}12/947/1850.pbf`;
+      send(res, reject ? 503 : 200, 'application/x-protobuf', reject ? 'invisible partial viewport' : geometryTiles.get(url.pathname) || Buffer.alloc(0));
+      return true;
+    } });
+    await waitReady(f.page, WAIT);
+    await observeErroredIdle(f.page);
+    await loseContext(f.page);
+    partial = true;
+    await f.page.evaluate(() => __recoveryLose.restoreContext());
+    await waitErroredIdle(f.page);
+    const sources = await withGL(f.page, gl => ({
+      lines: gl.querySourceFeatures('fixture', { sourceLayer: 'transportation' }).length,
+      fills: gl.querySourceFeatures('fixture', { sourceLayer: 'landcover' }).length,
+    }));
+    assert.ok(sources.lines > 0 && sources.fills > 0, 'the restored tile must contain actual line and polygon geometry despite its invisible paint');
+    await usableFallback(f.page);
+    assert.match((await probe(f.page)).status, /recovering/i);
+    assert.equal(await activeRetries(f.page), 1);
+    cleanPage(f.page);
+    return `${name} leaves the simplified map and Retry visible despite a successfully decoded real MVT`;
+  });
+
+  await run('geometry confined to adapter padding cannot qualify a restored partial map', async cleanup => {
+    let partial = false;
+    const f = await setup(cleanup, { init: retryClock, style: base => geometryStyle(base), intercept(req, res, url) {
+      if (!url.pathname.startsWith(TILE_PATH)) return false;
+      const reject = partial && url.pathname !== `${TILE_PATH}12/948/1850.pbf`;
+      send(res, reject ? 503 : 200, 'application/x-protobuf', reject ? 'only padded offscreen geometry remains' : geometryTiles.get(url.pathname) || Buffer.alloc(0));
+      return true;
+    } });
+    await waitReady(f.page, WAIT);
+    await f.page.evaluate(() => {
+      const world = 256 * 2 ** 13;
+      const centerX = 948 * 512 - __map.getSize().x / 2 - 8;
+      __map.setView([17.06, centerX / world * 360 - 180], 13, { animate: false });
+    });
+    await waitAligned(f.page);
+    await allLoaded(f.page);
+    await observeErroredIdle(f.page);
+    await loseContext(f.page);
+    partial = true;
+    await f.page.evaluate(() => __recoveryLose.restoreContext());
+    await waitErroredIdle(f.page);
+    const geometry = await withGL(f.page, gl => {
+      const bounds = __map.getBounds(), box = [gl.project(bounds.getNorthWest()), gl.project(bounds.getSouthEast())];
+      return { padded: gl.queryRenderedFeatures(undefined, { layers: ['roads'] }).length,
+        visible: gl.queryRenderedFeatures(box, { layers: ['roads'] }).length };
+    });
+    assert.ok(geometry.padded > 0, 'a real road must render in the padded GL canvas');
+    assert.equal(geometry.visible, 0, 'the same roads must all be outside the visible Leaflet map');
+    await usableFallback(f.page);
+    partial = false;
+    await f.page.evaluate(() => __recoveryClock.fire());
+    await allLoaded(f.page);
+    await waitReady(f.page, WAIT);
+    cleanPage(f.page);
+    return 'actual roads in adapter padding do not hide the fallback; the explicit Leaflet viewport becomes ready after tile recovery';
+  });
+
+  await run('partial real geometry before the first successful render retains the initial failure fallback', async cleanup => {
+    const f = await setup(cleanup, { style: base => geometryStyle(base), intercept(req, res, url) {
+      if (!url.pathname.startsWith(TILE_PATH)) return false;
+      const reject = url.pathname !== `${TILE_PATH}12/947/1850.pbf`;
+      send(res, reject ? 503 : 200, 'application/x-protobuf', reject ? 'initial partial viewport fails' : geometryTiles.get(url.pathname));
+      return true;
+    } });
+    await waitRetry(f.page, WAIT);
+    assert.match((await probe(f.page)).status, /unavailable/);
+    assert.ok(!(await probe(f.page)).hasLayer, 'the initial partial error must still tear down the failed street layer');
+    await usableFallback(f.page);
+    cleanPage(f.page);
+    return 'partial geometry only qualifies after an earlier successful map render; initial tile errors retain the normal unavailable/Retry fallback';
   });
 
   await run('place filters stay stable through real context restoration and two worker-pool restarts', async cleanup => {
@@ -624,12 +866,18 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     fail = true;
     await withGL(f.page, gl => gl.refreshTiles('fixture'));
     await f.page.waitForFunction(() => [...__recoveryClock.timers.values()].some(timer => timer.active), null, { timeout: WAIT });
+    await withGL(f.page, gl => {
+      const refresh = gl.refreshTiles;
+      window.__lostRefreshCalls = 0;
+      gl.refreshTiles = function(...args) { __lostRefreshCalls++; return refresh.apply(this, args); };
+    });
     await loseContext(f.page);
     assert.ok(await f.page.evaluate(() => [...__recoveryClock.timers.values()].every(timer => !timer.active)), 'the old tile retry timer must be cleared on loss');
     const beforeOnline = tileRequests;
     await f.page.evaluate(() => { __map.setView([17.10, -96.70], 14, { animate: false }); dispatchEvent(new Event('online')); });
     await f.page.waitForTimeout(100);
     assert.equal(tileRequests, beforeOnline, 'online must not refresh a discarded style or replay old tile coordinates');
+    assert.equal(await f.page.evaluate(() => __lostRefreshCalls), 0, 'online must not even invoke refreshTiles while the style is lost, including a caught/no-op call');
     fail = false;
     await f.page.evaluate(() => __recoveryLose.restoreContext());
     await waitReady(f.page, WAIT);
@@ -715,6 +963,14 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
       release(503);
     }
     await f.page.waitForFunction(n => __recoveryClock.scheduled.length > n, expected.length, { timeout: WAIT });
+    const beforeLossHistory = await f.page.evaluate(() => __recoveryClock.scheduled.length);
+    await loseContext(f.page);
+    await f.page.evaluate(() => __recoveryLose.restoreContext());
+    await until(() => pending.length > 0, 'context reconstruction must make new actual tile requests');
+    release(503);
+    await f.page.waitForFunction(n => __recoveryClock.scheduled.length > n, beforeLossHistory, { timeout: WAIT });
+    assert.equal(await f.page.evaluate(() => __recoveryClock.scheduled.at(-1)), 60000, 'a context loss must retain the capped failure backoff until full recovery');
+    assert.match((await probe(f.page)).status, /recovering/i);
     // The pending application timer is under test-clock control. No timer is fired here:
     // online itself must initiate HTTP requests, even at the maximum backoff.
     const beforeOnline = tileRequests;
@@ -723,6 +979,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     mode = 'success';
     release(200);
     await allLoaded(f.page);
+    await waitReady(f.page, WAIT);
     // Force a normal settled render so recovery, not an errored-idle shortcut, resets backoff.
     await f.page.evaluate(() => __map.panBy([-1, 0], { animate: false }));
     await withGL(f.page, (gl, timeout) => new Promise((resolve, reject) => {
@@ -743,6 +1000,6 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     assert.equal(reset, 2000, 'a genuinely successful tile load must reset backoff');
     assert.ok((await f.page.evaluate(() => __recoveryClock.idle.length)) >= expected.length);
     cleanPage(f.page);
-    return `delays ${actual.join(', ')} ms despite injected idle while native requests are held; online retries; loaded states reset to ${reset} ms`;
+    return `delays ${actual.join(', ')} ms despite injected idle; 60000 ms survives real context loss; online retries and full recovery resets to ${reset} ms`;
   });
 }
