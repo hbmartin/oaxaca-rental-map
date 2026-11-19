@@ -172,13 +172,15 @@ const checks = {
     const oaxaca = places.filter(p => p === 'city:Oaxaca');
     record('the city label for Oaxaca is hidden; other place labels still render', !oaxaca.length && places.includes('city:Santa Lucía del Camino'), `${places.length} place labels, Oaxaca rendered ${oaxaca.length}×`);
 
-    // An error after ready must not drop the streets.
+    // An error after ready must keep the streets and expose targeted Retry.
     await withGL(page, gl => gl.fire('error', { error: new Error('synthetic tile failure') }));
     await page.route(NET.tiles, r => r.abort());
     await page.evaluate(() => window.__map.setView([17.13, -96.62], 16, { animate: false }));
     await page.waitForTimeout(2500);
     const afterErr = await probe(page);
-    record('errors after ready keep the street map', afterErr.ready && afterErr.hasGL && !afterErr.status, `${page.warns.filter(w => /Street basemap/.test(w)).length} warnings, status "${afterErr.status}"`);
+    record('errors after ready keep the street map with a partial warning and Retry',
+      afterErr.ready && afterErr.hasGL && afterErr.retry && afterErr.status === 'Some streets are unavailable. Retrying…',
+      `${page.warns.filter(w => /Street basemap/.test(w)).length} warnings, status "${afterErr.status}"`);
     await page.unroute(NET.tiles);
 
     // WebGL context loss and restore.
