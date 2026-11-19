@@ -25,11 +25,23 @@ function send(res, status, headers = {}, body = '') {
   res.end(body);
 }
 
-// A synchronous interceptor may handle a request and return true; normal serving is unchanged otherwise.
-export function startServer(root, port = 0, host = '127.0.0.1', intercept = null) {
+// A synchronous interceptor may handle a request and return true. Report fixture errors separately
+// from their HTTP response, so a broken fixture cannot pass as an expected network failure.
+export function startServer(root, port = 0, host = '127.0.0.1', intercept = null, {
+  onInterceptError = error => console.error('Request interceptor failed:', error),
+} = {}) {
   root = path.resolve(root);
   const server = http.createServer((req, res) => {
-    if (intercept && intercept(req, res)) return;
+    try {
+      if (intercept && intercept(req, res)) return;
+    } catch (error) {
+      onInterceptError(error);
+      if (!res.writableEnded && !res.destroyed) {
+        if (res.headersSent) res.destroy();
+        else send(res, 500, {}, 'Request interceptor failed');
+      }
+      return;
+    }
     let rel;
     try { rel = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); } catch { return send(res, 400, {}, 'Bad request'); }
     // Never serve dotfiles or dot-directories such as .git.
