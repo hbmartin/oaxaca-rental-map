@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PMTiles } from 'pmtiles';
+import { PMTiles, SharedPromiseCache, EtagMismatch } from 'pmtiles';
 import { startServer } from '../scripts/serve.mjs';
 
 const CSS_PATH = '/vendor/maplibre-gl-6.19.0/maplibre-gl.css';
@@ -15,6 +15,11 @@ const PMTILES_PATH = '/vendor/pmtiles-4.5.0/pmtiles.js';
 const WAIT = 12000;
 const PARTIAL_WARNING = 'Some streets are unavailable. Retrying…';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function bounded(promise, message, timeout = 3000) {
+  let timer;
+  try { return await Promise.race([promise, new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error(message)), timeout); })]); }
+  finally { clearTimeout(timer); }
+}
 async function until(test, message, timeout = WAIT) {
   const end = Date.now() + timeout;
   while (!await test()) {
@@ -34,7 +39,7 @@ function send(res, code, type, body) {
   res.end(body);
 }
 // Resume a held archive request with the same Range behavior as the ordinary server.
-function archiveResponse(root, req, res) {
+function archiveResponse(root, req, res, etag) {
   if (res.destroyed) return;
   const file = path.join(root, ARCHIVE_PATH);
   const size = fs.statSync(file).size;
@@ -42,6 +47,7 @@ function archiveResponse(root, req, res) {
   const start = range ? Number(range[1]) : 0;
   const end = range && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
   const headers = { 'Content-Type': 'application/octet-stream', 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1 };
+  if (etag) headers.ETag = etag;
   if (range) headers['Content-Range'] = `bytes ${start}-${end}/${size}`;
   res.writeHead(range ? 206 : 200, headers);
   fs.createReadStream(file, { start, end }).pipe(res);
@@ -226,6 +232,41 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     assert.equal(current.retry, expected);
     assert.ok(current.ready, 'a partial tile warning must keep the rendered street map visible');
   }
+  const captureStreetProtocols = () => {
+    let exported;
+    window.__streetProtocols = [];
+    Object.defineProperty(window, 'pmtiles', { configurable: true, get: () => exported, set(value) {
+      const Native = value.Protocol;
+      exported = { ...value, Protocol: class extends Native { constructor(...args) { super(...args); __streetProtocols.push(this); } } };
+    } });
+  };
+  const archiveInit = `(${retryClock.toString()})();(${captureStreetProtocols.toString()})();`;
+  async function rememberStreet(page, base) {
+    await page.evaluate(base => {
+      let layer; __map.eachLayer(l => { if (l.getMaplibreMap) layer = l; });
+      const protocol = __streetProtocols.at(-1), archive = protocol.get(base + '/basemap/oaxaca.pmtiles');
+      if (!archive) throw new Error('the actual PMTiles street source must populate its archive cache');
+      window.__streetIdentity = { layer, gl: layer.getMaplibreMap(), runtime: maplibregl, protocol, archive };
+    }, base);
+  }
+  const sameStreet = (page, base) => page.evaluate(base => {
+    let layer; __map.eachLayer(l => { if (l.getMaplibreMap) layer = l; });
+    const id = __streetIdentity;
+    return layer === id.layer && layer.getMaplibreMap() === id.gl && maplibregl === id.runtime &&
+      __streetProtocols.at(-1) === id.protocol && id.protocol.get(base + '/basemap/oaxaca.pmtiles') === id.archive;
+  }, base);
+  const archiveStyle = base => {
+    const style = geometryStyle(base); style.sources.fixture = { type: 'vector', url: 'pmtiles://basemap/oaxaca.pmtiles' }; return style;
+  };
+  const newArchiveCache = () => {
+    const start = app.indexOf('function streetArchiveCache(){');
+    assert.ok(start >= 0, 'the actual served cache factory must exist');
+    const end = app.indexOf('\n}', start);
+    assert.ok(end > start, 'the served cache factory must have a column-zero closing brace');
+    return new Function('window', app.slice(start, end + 2) + '\nreturn streetArchiveCache();')({ pmtiles: { SharedPromiseCache } });
+  };
+  const localBytes = (offset, length, etag) => ({ data: archiveBytes.buffer.slice(archiveBytes.byteOffset + offset,
+    archiveBytes.byteOffset + Math.min(offset + length, archiveBytes.length)), etag });
 
   await run('fixture replacements preserve regex flags and ignore the caller lastIndex', async () => {
     const cases = [
@@ -243,6 +284,97 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     assert.throws(() => replaceOnce('target TARGET', /target/gi, 'done'), /exactly once/);
     assert.throws(() => replaceOnce('target\ntarget', /^target$/m, 'done'), /exactly once/);
     return 'i/m/s/g flags survive; fresh regex clones start at zero; missing/multiple matches fail explicitly';
+  });
+
+  await run('actual archive cache factory coalesces headers and preserves a fresh generation after late failure', async () => {
+    const cache = newArchiveCache(); let headers = 0, rejectOld, release, phase = 'held';
+    const source = { getKey: () => 'cache-factory-race', async getBytes(offset, length) {
+      if (offset === 0) headers++;
+      if (phase === 'held') return new Promise((resolve, reject) => { release = () => resolve(localBytes(offset, length)); rejectOld = reject; });
+      return localBytes(offset, length);
+    } };
+    const a = cache.getHeader(source), b = cache.getHeader(source);
+    await until(() => release, 'the shared header request must be held');
+    assert.equal(headers, 1); release(); assert.equal(await bounded(a, 'first coalesced header must settle'), await bounded(b, 'second coalesced header must settle'));
+    await cache.invalidate(source);
+    release = null; const old = cache.getHeader(source).catch(error => error.message);
+    await until(() => release, 'the old generation must hold a second header');
+    cache.invalidate(source); phase = 'fresh';
+    const fresh = await bounded(cache.getHeader(source), 'synchronous invalidation must immediately expose a fresh header delegate'), count = headers;
+    rejectOld(new Error('late abandoned header rejection')); assert.equal(await old, 'late abandoned header rejection');
+    assert.equal(await bounded(cache.getHeader(source), 'cache header must settle'), fresh);
+    assert.equal(headers, count, 'late rejection must not discard the newer successful header');
+    return 'the factory extracted from the served page coalesces concurrent headers and ignores rejection from an abandoned delegate';
+  });
+
+  await run('actual archive cache preserves headers on directory abort and ordinary tile failure', async () => {
+    const cache = newArchiveCache(); let phase = 'ok', headers = 0, directoryStarted = false, rootOffset = 0;
+    const directoryOffset = archiveBytes.length + 1024;
+    const tileRange = geometryRanges.get('948/1850');
+    const source = { getKey: () => 'cache-factory-abort', async getBytes(offset, length, signal) {
+      if (offset === 0) headers++;
+      if (offset === directoryOffset && phase === 'abort') return new Promise((resolve, reject) => {
+        directoryStarted = true;
+        signal.addEventListener('abort', () => reject(new DOMException('cancelled directory', 'AbortError')), { once: true });
+      });
+      if (offset === tileRange.offset && length === tileRange.length && phase === 'tile-failure') throw new Error('ordinary tile 503');
+      return localBytes(offset === directoryOffset ? rootOffset : offset, length);
+    } };
+    const header = await bounded(cache.getHeader(source), 'cache header must settle'), count = headers;
+    rootOffset = header.rootDirectoryOffset;
+    phase = 'abort';
+    const cancellation = new AbortController();
+    const pendingDirectory = cache.getDirectory(source, directoryOffset, header.rootDirectoryLength, header, cancellation.signal);
+    await until(() => directoryStarted, 'the directory request must be pending before cancellation');
+    cancellation.abort();
+    await assert.rejects(bounded(pendingDirectory, 'cancelled directory must settle'), error => error.name === 'AbortError');
+    assert.equal(await bounded(cache.getHeader(source), 'cache header must settle'), header); assert.equal(headers, count);
+    phase = 'ok';
+    const directory = await bounded(cache.getDirectory(source, directoryOffset, header.rootDirectoryLength, header, new AbortController().signal), 'cancelled directory must be fetchable again');
+    assert.ok(directory.length > 0, 'the cancelled directory must be fetchable again using valid archive directory bytes');
+    assert.equal(headers, count);
+    const archive = new PMTiles(source, cache); await bounded(archive.getZxy(12, 947, 1850), 'archive warm-up must settle');
+    phase = 'tile-failure'; await assert.rejects(archive.getZxy(12, 948, 1850), /ordinary tile 503/);
+    phase = 'ok'; assert.ok((await bounded(archive.getZxy(12, 948, 1850), 'archive recovery must settle')).data.byteLength);
+    assert.equal(headers, count, 'tile-data failures must retain successful metadata and directory cache');
+    return 'directory AbortError and ordinary tile-data 503 preserve the real installed package header cache';
+  });
+
+  await run('actual archive cache recovers an ETag mismatch followed by a replacement-header 503', async () => {
+    const cache = newArchiveCache(); let phase = 'initial', headers = 0;
+    const source = { getKey: () => 'cache-factory-etag', async getBytes(offset, length) {
+      if (offset === 0) headers++;
+      if (phase === 'redeploy') {
+        if (offset !== 0) throw new EtagMismatch('archive replaced');
+        throw new Error('replacement header 503');
+      }
+      return localBytes(offset, length, phase === 'initial' ? 'v1' : 'v2');
+    } };
+    const archive = new PMTiles(source, cache); await bounded(archive.getZxy(12, 947, 1850), 'archive warm-up must settle');
+    phase = 'redeploy'; await assert.rejects(archive.getZxy(12, 948, 1850), /replacement header 503/);
+    const before = headers; phase = 'restored';
+    assert.ok((await bounded(archive.getZxy(12, 948, 1850), 'archive recovery must settle')).data.byteLength);
+    assert.equal(headers, before + 1, 'a failed replacement header must not poison subsequent reads');
+    return 'ETag invalidation and a failed replacement header recover through the same PMTiles object and actual cache factory';
+  });
+
+  await run('actual archive cache refetches a rejected directory through the same facade', async () => {
+    const cache = newArchiveCache(), directoryOffset = archiveBytes.length + 2048;
+    let rootOffset = 0, fail = false, directoryReads = 0, headers = 0;
+    const source = { getKey: () => 'cache-directory-503', async getBytes(offset, length) {
+      if (offset === 0) headers++;
+      if (offset === directoryOffset) { directoryReads++; if (fail) throw new Error('directory 503'); }
+      return localBytes(offset === directoryOffset ? rootOffset : offset, length);
+    } };
+    const header = await bounded(cache.getHeader(source), 'directory fixture header must settle'); rootOffset = header.rootDirectoryOffset;
+    fail = true;
+    await assert.rejects(bounded(cache.getDirectory(source, directoryOffset, header.rootDirectoryLength, header, new AbortController().signal), 'directory rejection must settle'), /directory 503/);
+    fail = false;
+    const entries = await bounded(cache.getDirectory(source, directoryOffset, header.rootDirectoryLength, header, new AbortController().signal), 'rejected directory must be fetchable again');
+    assert.ok(entries.length > 0); assert.equal(directoryReads, 2);
+    await bounded(cache.getHeader(source), 'fresh delegate header must settle');
+    assert.equal(headers, 2, 'a non-abort directory rejection must replace its poisoned delegate');
+    return 'a genuine rejected directory promise is evicted and valid compressed directory bytes load through the same facade';
   });
 
   for (const trigger of ['pruning', 'online']) await run(trigger === 'online' ? 'online integration leaves a pruned failure queue empty' : 'loaded empty viewports become ready immediately after old failures leave the GL cover', async cleanup => {
@@ -556,12 +688,14 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
   });
 
   await run('an initial archive failure during WebGL loss keeps a fallback and remains retryable after restore', async cleanup => {
-    let first;
+    let first, allow = false;
     const f = await setup(cleanup, {
       style: base => fixtureStyle(base, { type: 'vector', url: 'pmtiles://basemap/oaxaca.pmtiles' }),
       intercept(req, res, url, held) {
-        if (url.pathname !== ARCHIVE_PATH || first) return false;
-        first = { req, res }; held.add(res); return true;
+        if (url.pathname !== ARCHIVE_PATH) return false;
+        if (!first) { first = { req, res }; held.add(res); return true; }
+        if (!allow && /^bytes=0-/.test(req.headers.range || '')) { send(res, 503, 'text/plain', 'archive remains unavailable during restoration'); return true; }
+        return false;
       },
     });
     await until(() => first, 'the initial PMTiles header was not requested');
@@ -579,6 +713,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     }, null, { timeout: 4000 });
     const fallback = await probe(f.page);
     assert.ok(!fallback.ready && fallback.retry && !fallback.hasLayer && /Natural Earth/.test(fallback.credits));
+    allow = true;
     await f.page.click('#map-retry');
     await waitReady(f.page, WAIT);
     cleanPage(f.page);
@@ -632,6 +767,43 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     cleanPage(f.page);
     return 'the original module evaluates late without replacing the active runtime; Retry replaces its rejected PMTiles cache and reaches ready';
   });
+
+  for (const ready of [false, true]) for (const kind of ['GPUInitializationError', 'Error']) {
+    await run(`physical restoration ${kind} cleans up ${ready ? 'after readiness' : 'before the first render'} and Retry creates a fresh map`, async cleanup => {
+      let allow = ready, pending = [];
+      const f = await setup(cleanup, { style: base => fixtureStyle(base), intercept(req, res, url, held) {
+        if (!url.pathname.startsWith(TILE_PATH)) return false;
+        if (allow) send(res, 200, 'application/x-protobuf', Buffer.alloc(0));
+        else { held.add(res); pending.push(res); }
+        return true;
+      } });
+      if (ready) await waitReady(f.page, WAIT);
+      else await until(() => pending.length > 0, 'initial tile responses must remain held before first render');
+      await withGL(f.page, gl => { window.__failedRestoreMap = gl; });
+      await loseContext(f.page);
+      await withGL(f.page, gl => gl.fire('error', { sourceId: 'fixture', tile: { tileID: { key: 'stale-lost-tile', canonical: { z: 12, x: 947, y: 1850 } } }, error: new Error('stale tile failure during actual loss') }));
+      assert.ok((await probe(f.page)).hasLayer && /paused/.test((await probe(f.page)).status), 'ordinary stale tile errors while lost must not tear down the paused map');
+      await withGL(f.page, (gl, kind) => {
+        gl._setupPainter = function() { throw kind === 'GPUInitializationError' ? new maplibregl.GPUInitializationError({}, undefined) : new Error('controlled physical restoration setup error'); };
+      }, kind);
+      await f.page.evaluate(() => __recoveryLose.restoreContext());
+      await f.page.waitForFunction(() => {
+        let layer = false; __map.eachLayer(l => { if (l.getMaplibreMap) layer = true; });
+        return !layer && /unavailable/.test(document.getElementById('map-status-text').textContent) && !document.getElementById('map-retry').hidden;
+      }, null, { timeout: WAIT });
+      assert.equal(await f.page.locator('.leaflet-gl-layer').count(), 0);
+      await usableFallback(f.page);
+      await f.page.evaluate(() => { __map.panBy([80, 30], { animate: false }); __map.setZoom(14); __map.fire('resize'); });
+      await f.page.waitForTimeout(100); cleanPage(f.page);
+      allow = true;
+      for (const response of pending) if (!response.destroyed) send(response, 200, 'application/x-protobuf', Buffer.alloc(0));
+      pending = [];
+      await f.page.click('#map-retry'); await waitReady(f.page, WAIT);
+      assert.ok(await withGL(f.page, gl => gl !== __failedRestoreMap), 'Retry must construct a fresh GL map after physical setup failure');
+      cleanPage(f.page);
+      return 'actual WEBGL_lose_context restoration enters MapLibre setup, fails deterministically, removes the broken canvas, preserves usable fallback and recovers on fresh Retry';
+    });
+  }
 
   await run('initial context restoration restarts Loading with a fresh visible 20-second budget', async cleanup => {
     const clock = () => {
@@ -973,6 +1145,235 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     return 'an initial tile 503 removes the layer and keeps the simplified map and Retry even when other tiles carry geometry';
   });
 
+  await run('a live archive recovers ETag mismatch and header 503 without replacing its map or cache identity', async cleanup => {
+    let phase = 'v1', failHeader = false, headerFailures = 0, headers = 0;
+    const f = await setup(cleanup, { init: archiveInit + '\nwindow.__unhandled = []; addEventListener("unhandledrejection", e => __unhandled.push(String(e.reason)));', style: archiveStyle,
+      intercept(req, res, url) {
+        if (url.pathname !== ARCHIVE_PATH) return false;
+        if (/^bytes=0-/.test(req.headers.range || '')) {
+          headers++;
+          if (failHeader) { failHeader = false; headerFailures++; send(res, 503, 'text/plain', 'replacement archive header failed'); return true; }
+        }
+        archiveResponse(root, req, res, `"${phase}"`); return true;
+      } });
+    await waitReady(f.page, WAIT); await allLoaded(f.page); await settledFrame(f.page); await observeErroredIdle(f.page); await rememberStreet(f.page, f.base);
+    phase = 'v2'; failHeader = true;
+    await withGL(f.page, gl => gl.refreshTiles('fixture', [{ z: 12, x: 947, y: 1850 }]));
+    await waitErroredIdle(f.page);
+    assert.equal(headerFailures, 1); await warning(f.page);
+    assert.ok(await sameStreet(f.page, f.base));
+    await f.page.click('#map-retry');
+    await allLoaded(f.page); await settledFrame(f.page); await warning(f.page, false);
+    assert.ok(await sameStreet(f.page, f.base));
+    assert.ok(headers >= 3, 'the failed replacement metadata must be fetched again');
+    assert.deepEqual(await f.page.evaluate(() => __unhandled), []);
+    cleanPage(f.page);
+    return 'real HTTP ETag replacement and header503 recover with fresh metadata on the same GL map, protocol and archive object';
+  });
+
+  await run('manual Retry rebuilds immediately when every known failed coordinate is already loading', async cleanup => {
+    const r = geometryRanges.get('947/1850'), tileRange = `bytes=${r.offset}-${r.offset + r.length - 1}`;
+    let mode = 'success', oldResponse, rebuild = false, newHeader;
+    const f = await setup(cleanup, { init: archiveInit, style: archiveStyle, intercept(req, res, url, held) {
+      if (url.pathname !== ARCHIVE_PATH) return false;
+      if (rebuild && /^bytes=0-/.test(req.headers.range || '') && !newHeader) { newHeader = { req, res }; held.add(res); return true; }
+      if (req.headers.range !== tileRange) return false;
+      if (mode === 'fail') { send(res, 503, 'text/plain', 'known failed canonical tile'); return true; }
+      if (mode === 'hold') { oldResponse = { req, res }; held.add(res); return true; }
+      return false;
+    } });
+    await waitReady(f.page, WAIT); await allLoaded(f.page); await settledFrame(f.page); await observeErroredIdle(f.page); await rememberStreet(f.page, f.base);
+    const libraries = () => f.requests.filter(r => r.pathname === MAPLIBRE_PATH || r.pathname === CSS_PATH || r.pathname === PMTILES_PATH || /leaflet-maplibre-gl\.js$/.test(r.pathname)).length;
+    const count = libraries();
+    mode = 'fail'; await withGL(f.page, gl => gl.refreshTiles('fixture', [{ z: 12, x: 947, y: 1850 }])); await waitErroredIdle(f.page);
+    mode = 'hold'; await f.page.click('#map-retry'); await until(() => oldResponse, 'targeted tile retry must remain held');
+    const before = f.requests.length;
+    await f.page.evaluate(() => { dispatchEvent(new Event('online')); dispatchEvent(new Event('online')); });
+    await f.page.waitForTimeout(100);
+    assert.equal(f.requests.length, before, 'online with no eligible canonical tile must not rebuild or duplicate requests');
+    assert.ok(await sameStreet(f.page, f.base));
+    mode = 'success'; rebuild = true;
+    await f.page.click('#map-retry'); await until(() => newHeader, 'manual Retry must immediately abandon the in-flight-only map');
+    const fallback = await probe(f.page);
+    assert.ok(!fallback.ready && /Natural Earth/.test(fallback.credits));
+    assert.ok(await f.page.locator('.pin-host:not([hidden])').count());
+    const row = f.page.locator('#list .row-btn').first(); await row.click();
+    assert.equal(await row.getAttribute('aria-expanded'), 'true');
+    await f.page.locator('.leaflet-popup').waitFor({ state: 'visible', timeout: WAIT }); await row.click(); await f.page.evaluate(() => __map.stop());
+    archiveResponse(root, newHeader.req, newHeader.res);
+    await waitReady(f.page, WAIT); await allLoaded(f.page); await settledFrame(f.page);
+    assert.ok(await f.page.evaluate(base => {
+      let layer; __map.eachLayer(l => { if (l.getMaplibreMap) layer = l; });
+      const old = __streetIdentity, protocol = __streetProtocols.at(-1);
+      return layer !== old.layer && layer.getMaplibreMap() !== old.gl && maplibregl === old.runtime && protocol !== old.protocol && protocol.get(base + '/basemap/oaxaca.pmtiles') !== old.archive;
+    }, f.base));
+    assert.equal(libraries(), count, 'a rebuild must reuse successful library and stylesheet loads');
+    if (!oldResponse.res.destroyed) archiveResponse(root, oldResponse.req, oldResponse.res);
+    await f.page.evaluate(() => { __streetIdentity.gl.fire('error', { error: new Error('late abandoned tile response') }); __streetIdentity.gl.fire('webglcontextlost'); });
+    assert.ok((await probe(f.page)).ready, 'late events from the abandoned GL map must not remove the replacement');
+    mode = 'fail';
+    await observeErroredIdle(f.page);
+    await withGL(f.page, gl => gl.refreshTiles('fixture', [{ z: 12, x: 947, y: 1850 }]));
+    await waitErroredIdle(f.page);
+    assert.equal(await f.page.evaluate(() => __recoveryClock.scheduled.at(-1)), 2000, 'a rebuilt layer begins with a fresh retry budget');
+    cleanPage(f.page);
+    return 'online stays targeted; manual no-eligible Retry shows usable fallback, creates fresh GL/protocol/archive/header state, reuses libraries and rejects stale map events';
+  });
+
+  await run('a thrown refresh keeps the needed failure queued and isolates removed sources', async cleanup => {
+    let fail = false, requests = 0;
+    const f = await setup(cleanup, { init: retryClock, style: geometryStyle, intercept(req, res, url) {
+      if (!url.pathname.startsWith(TILE_PATH)) return false; requests++;
+      const reject = fail && url.pathname === `${TILE_PATH}12/947/1850.pbf`;
+      send(res, reject ? 503 : 200, 'application/x-protobuf', reject ? 'tile failed before refresh throws' : geometryTiles.get(url.pathname) || Buffer.alloc(0)); return true;
+    } });
+    await waitReady(f.page, WAIT); await allLoaded(f.page); await settledFrame(f.page); await observeErroredIdle(f.page);
+    fail = true; await withGL(f.page, gl => gl.refreshTiles('fixture', [{ z: 12, x: 947, y: 1850 }])); await waitErroredIdle(f.page);
+    await withGL(f.page, gl => {
+      window.__refreshOriginal = gl.refreshTiles; let once = true;
+      gl.refreshTiles = function(...args) { if (once) { once = false; throw new Error('controlled synchronous refresh exception'); } return __refreshOriginal.apply(this, args); };
+    });
+    await f.page.click('#map-retry'); await settledFrame(f.page); await warning(f.page);
+    assert.equal(await activeRetries(f.page), 1, 'a thrown dispatch must retain needed failures');
+    assert.equal(await f.page.evaluate(() => __recoveryClock.scheduled.at(-1)), 4000, 'the failed dispatch counts as an attempted retry');
+    fail = false; await f.page.click('#map-retry'); await allLoaded(f.page); await settledFrame(f.page); await warning(f.page, false);
+    fail = true; const beforeRemoval = await f.page.evaluate(() => __recoverySettledErrors.length);
+    await withGL(f.page, gl => gl.refreshTiles('fixture', [{ z: 12, x: 947, y: 1850 }]));
+    await waitErroredIdle(f.page, beforeRemoval); await warning(f.page);
+    assert.equal(await activeRetries(f.page), 1, 'source removal must begin with an actual queued failure');
+    const before = requests;
+    await withGL(f.page, gl => { gl.removeLayer('roads'); gl.removeSource('fixture'); });
+    await f.page.evaluate(() => dispatchEvent(new Event('online'))); await settledFrame(f.page);
+    assert.equal(requests, before); await warning(f.page, false); assert.equal(await activeRetries(f.page), 0); cleanPage(f.page);
+    return 'refresh exceptions retain the queued coordinate and backoff; later success recovers, and discarded sources cannot receive stale retries';
+  });
+
+  await run('a retained z14 response cannot settle a failed z15 instance sharing its canonical tile', async cleanup => {
+    const c = { z: 14, x: 3789, y: 7403 };
+    archiveReads = []; await archive.getZxy(c.z, c.x, c.y);
+    const range = archiveReads.at(-1), rangeHeader = `bytes=${range.offset}-${range.offset + range.length - 1}`;
+    let armed = false, hits = 0, original;
+    const f = await setup(cleanup, { init: retryClock, style: base => {
+      const style = geometryStyle(base); style.sources.fixture = { type: 'vector', url: 'pmtiles://basemap/oaxaca.pmtiles' }; return style;
+    }, intercept(req, res, url, held) {
+      if (!armed || url.pathname !== ARCHIVE_PATH || req.headers.range !== rangeHeader) return false;
+      if (++hits === 1) { original = { req, res }; held.add(res); return true; }
+      if (hits === 2) { send(res, 503, 'text/plain', 'the new overscaled tile fails'); return true; }
+      return false;
+    } });
+    await waitReady(f.page, WAIT);
+    await f.page.evaluate(() => __map.setView([17.0607, -96.7254], 15, { animate: false }));
+    await allLoaded(f.page); await settledFrame(f.page);
+    await withGL(f.page, gl => {
+      window.__collisionEvents = [];
+      gl.on('sourcedata', event => { const id = event.coord; if(id?.canonical.z === 14 && id.canonical.x === 3789 && id.canonical.y === 7403) __collisionEvents.push({type:'success',key:id.key,z:id.overscaledZ}); });
+      gl.on('error', event => { const id = event.tile?.tileID; if(id?.canonical.z === 14 && id.canonical.x === 3789 && id.canonical.y === 7403) __collisionEvents.push({type:'error',key:id.key,z:id.overscaledZ}); });
+    });
+    armed = true;
+    await withGL(f.page, (gl,c) => gl.refreshTiles('fixture',[c]), c);
+    await until(() => original, 'the loaded z14 refresh must remain held');
+    await f.page.evaluate(() => __map.setView([17.0607, -96.7254], 16, { animate: false }));
+    await f.page.waitForFunction(() => __collisionEvents.some(e=>e.type==='error'&&e.z===15), null, { timeout: WAIT });
+    const states = page => withGL(page, gl => ({ status:document.getElementById('map-status-text').textContent, retry:!document.getElementById('map-retry').hidden, events:__collisionEvents,
+      active:[...__recoveryClock.timers.values()].filter(t=>t.active).length, tiles:gl.style.tileManagers.fixture._inViewTiles.getAllTiles().filter(t=>t.tileID.canonical.z===14&&t.tileID.canonical.x===3789&&t.tileID.canonical.y===7403).map(t=>({key:t.tileID.key,z:t.tileID.overscaledZ,state:t.state})) }));
+    assert.ok((await states(f.page)).active > 0);
+    await warning(f.page);
+    assert.equal(original.res.destroyed,false,'the old z14 request must remain live as a retained renderable ancestor');
+    archiveResponse(root, original.req, original.res);
+    await f.page.waitForFunction(() => __collisionEvents.some(e=>e.type==='success'&&e.z===14), null, { timeout: WAIT });
+    await settledFrame(f.page);
+
+    const after=await states(f.page);
+    assert.ok(after.tiles.some(t=>t.z===15&&t.state==='errored'));
+    assert.ok(after.active > 0, 'the retained z14 success must preserve the failed z15 retry');
+    assert.equal(after.retry, true, 'the retained z14 success must not hide another instance failure');
+    await warning(f.page);
+    await f.page.evaluate(() => __recoveryClock.fire());
+    await allLoaded(f.page); await settledFrame(f.page); await warning(f.page, false);
+    return 'a real retained z14 success preserves a distinct failed z15 instance; its own later retry restores streets';
+  });
+
+  await run('a needed tracked abort requeues its exact tile while unrelated and unneeded aborts stay inert', async cleanup => {
+    let mode = 'success', heldResponse;
+    const f = await setup(cleanup, { init: retryClock, style: geometryStyle, intercept(req, res, url, held) {
+      if (!url.pathname.startsWith(TILE_PATH)) return false;
+      if (url.pathname === `${TILE_PATH}12/947/1850.pbf`) {
+        if (mode === 'fail') { send(res, 503, 'text/plain', 'tile failed before abort'); return true; }
+        if (mode === 'hold') { heldResponse = res; held.add(res); return true; }
+      }
+      send(res, 200, 'application/x-protobuf', geometryTiles.get(url.pathname) || Buffer.alloc(0)); return true;
+    } });
+    await waitReady(f.page, WAIT); await allLoaded(f.page); await settledFrame(f.page); await observeErroredIdle(f.page);
+    await withGL(f.page, gl => gl.on('error', event => {
+      const id = event.tile?.tileID;
+      if (id?.canonical.x === 947 && id.canonical.y === 1850) window.__nativeAbortCoord = id;
+    }));
+    mode = 'fail'; await withGL(f.page, gl => gl.refreshTiles('fixture', [{ z: 12, x: 947, y: 1850 }])); await waitErroredIdle(f.page);
+    assert.ok(await f.page.evaluate(() => !!__nativeAbortCoord?.key), 'the abort control must use the full ID captured from a real native tile failure');
+    mode = 'hold'; await f.page.click('#map-retry'); await until(() => heldResponse, 'the needed retry response must remain held');
+    const history = await f.page.evaluate(() => __recoveryClock.scheduled.length);
+    await withGL(f.page, gl => gl.fire('sourcedataabort', { sourceId: 'fixture', coord: __nativeAbortCoord }));
+    await f.page.waitForFunction(n => __recoveryClock.scheduled.length > n, history, { timeout: WAIT });
+    assert.equal(await f.page.evaluate(() => __recoveryClock.scheduled.at(-1)), 4000, 'a needed tracked abort must requeue with the advanced retry budget');
+    assert.equal(heldResponse.writableEnded, false); await warning(f.page);
+    mode = 'success'; send(heldResponse, 200, 'application/x-protobuf', geometryTiles.get(`${TILE_PATH}12/947/1850.pbf`));
+    await allLoaded(f.page); await settledFrame(f.page); await warning(f.page, false); assert.equal(await activeRetries(f.page), 0);
+    const settledHistory = await f.page.evaluate(() => __recoveryClock.scheduled.length);
+    await withGL(f.page, gl => gl.fire('sourcedataabort', { sourceId: 'unrelated-source', coord: __nativeAbortCoord }));
+    await withGL(f.page, gl => gl.fire('sourcedataabort', { sourceId: 'fixture', coord: __nativeAbortCoord }));
+    await f.page.evaluate(() => __map.setView([17.06, -96.56], 16, { animate: false }));
+    await allLoaded(f.page); await settledFrame(f.page);
+    await withGL(f.page, gl => gl.fire('sourcedataabort', { sourceId: 'fixture', coord: __nativeAbortCoord }));
+    assert.equal(await f.page.evaluate(() => __recoveryClock.scheduled.length), settledHistory, 'unrelated and out-of-cover aborts must not create retry work');
+    assert.equal(await activeRetries(f.page), 0); await warning(f.page, false); cleanPage(f.page);
+    return 'a public abort event for a real held retry requeues only its still-needed full tile ID; success cancels it and unrelated/unneeded aborts remain inert';
+  });
+
+  await run('settled idle retires an eventless completed retry while preserving a separate failed tile', async cleanup => {
+    let mode = 'success', pending = [], reads = [];
+    const paths = [`${TILE_PATH}12/947/1850.pbf`, `${TILE_PATH}12/948/1850.pbf`];
+    const f = await setup(cleanup, { init: retryClock, style: geometryStyle, intercept(req, res, url, held) {
+      if (!url.pathname.startsWith(TILE_PATH)) return false;
+      if (paths.includes(url.pathname)) {
+        reads.push(url.pathname);
+        if (mode === 'fail') { send(res, 503, 'text/plain', 'known failed eventless coordinate'); return true; }
+        if (mode === 'hold') { pending.push({ path: url.pathname, res }); held.add(res); return true; }
+      }
+      send(res, 200, 'application/x-protobuf', geometryTiles.get(url.pathname) || Buffer.alloc(0)); return true;
+    } });
+    await waitReady(f.page, WAIT); await allLoaded(f.page); await settledFrame(f.page); await observeErroredIdle(f.page);
+    await withGL(f.page, gl => gl.on('error', event => {
+      const id = event.tile?.tileID;
+      if (id?.canonical.x === 947 && id.canonical.y === 1850) window.__eventlessCoord = id;
+    }));
+    const coords = [{ z: 12, x: 947, y: 1850 }, { z: 12, x: 948, y: 1850 }];
+    mode = 'fail'; await withGL(f.page, (gl, coords) => gl.refreshTiles('fixture', coords), coords); await waitErroredIdle(f.page);
+    mode = 'hold'; await f.page.click('#map-retry'); await until(() => pending.length === 2, 'both failed native responses must be held');
+    const take = path => { const index = pending.findIndex(entry => entry.path === path); assert.ok(index >= 0, `a native response must be held for ${path}`); return pending.splice(index, 1)[0]; };
+    const idle = await f.page.evaluate(() => __recoverySettledErrors.length);
+    send(take(paths[1]).res, 503, 'text/plain', 'B remains failed while A completes without a coordinate event');
+    await f.page.waitForFunction(() => [...__recoveryClock.timers.values()].some(t => t.active), null, { timeout: WAIT });
+    await withGL(f.page, gl => {
+      window.__eventlessOriginalFire = gl.fire; window.__suppressedCoordinateEvents = 0;
+      gl.fire = function(event, data) {
+        const type = typeof event === 'string' ? event : event.type, payload = typeof event === 'string' ? data : event;
+        if (type === 'sourcedata' && payload?.sourceId === 'fixture' && payload.coord?.key === __eventlessCoord.key) { __suppressedCoordinateEvents++; return this; }
+        return __eventlessOriginalFire.apply(this, arguments);
+      };
+    });
+    send(take(paths[0]).res, 200, 'application/x-protobuf', geometryTiles.get(paths[0]));
+    await f.page.waitForFunction(() => __suppressedCoordinateEvents > 0, null, { timeout: WAIT });
+    await waitErroredIdle(f.page, idle);
+    await warning(f.page); assert.equal(await activeRetries(f.page), 1, 'settled idle must preserve B rather than clearing all records');
+    await withGL(f.page, gl => { gl.fire = __eventlessOriginalFire; });
+    reads = []; await f.page.evaluate(() => dispatchEvent(new Event('online')));
+    await until(() => pending.length === 1, 'B must remain eligible after eventless A finishes');
+    assert.deepEqual(reads, [paths[1]], 'eventless completed A must not be requested again');
+    send(take(paths[1]).res, 200, 'application/x-protobuf', geometryTiles.get(paths[1]));
+    await allLoaded(f.page); await settledFrame(f.page); await warning(f.page, false); assert.equal(await activeRetries(f.page), 0); cleanPage(f.page);
+    return 'real native data/render/idle complete A while only its sourcedata notification is suppressed; failed B survives and final recovery clears the warning';
+  });
+
   await run('targeted Retry preserves a live PMTiles map and clears only successful coordinates', async cleanup => {
     const coords = [{ z: 12, x: 947, y: 1850 }, { z: 12, x: 948, y: 1850 }];
     const ranges = new Map(coords.map(c => {
@@ -1045,9 +1446,9 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     await until(() => pending.some(entry => entry.key === '947/1850'), 'A must retry immediately while the original B request is still held');
     assert.deepEqual(reads, ['947/1850']);
     await warning(f.page);
-    await f.page.click('#map-retry'); await f.page.click('#map-retry');
+    await f.page.evaluate(() => { dispatchEvent(new Event('online')); dispatchEvent(new Event('online')); });
     await f.page.waitForTimeout(100);
-    assert.deepEqual(reads, ['947/1850'], 'repeated clicks must not duplicate the in-flight A retry');
+    assert.deepEqual(reads, ['947/1850'], 'online with no eligible failure must not duplicate the in-flight A retry');
     assert.equal(originalB.res.writableEnded, false);
     const scheduledBeforeFailure = await f.page.evaluate(() => __recoveryClock.scheduled.length);
     send(take('947/1850').res, 503, 'text/plain', 'A retry fails while unrelated B remains pending');
@@ -1058,8 +1459,8 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     const aSuccesses = await f.page.evaluate(() => __nativeCoordinateSuccess.filter(event => event.x === 947 && event.y === 1850).length);
     const retriedA = take('947/1850'); archiveResponse(root, retriedA.req, retriedA.res);
     await f.page.waitForFunction(n => __nativeCoordinateSuccess.filter(event => event.x === 947 && event.y === 1850).length > n, aSuccesses, { timeout: WAIT });
-    await warning(f.page);
-    assert.ok(await withGL(f.page, gl => !gl.areTilesLoaded()), 'A success must retain the warning while original B remains pending');
+    await warning(f.page, false);
+    assert.ok(await withGL(f.page, gl => !gl.areTilesLoaded()), 'unrelated original B may remain pending after known A failures clear');
     assert.equal(originalB.res.writableEnded, false);
     send(take('948/1850').res, 503, 'text/plain', 'second visible error');
     await waitErroredIdle(f.page);
@@ -1086,28 +1487,40 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     await withGL(f.page, (gl, c) => gl.refreshTiles('fixture', c), coords);
     await waitErroredIdle(f.page, beforeFastRound);
     mode = 'hold';
-    // Button Retry holds both ranges. A fast failure must not make another click duplicate
-    // the remaining in-flight request, even though that failure requeues an automatic timer.
+    // Re-failed A remains eligible while a different canonical B retry is held.
     reads = [];
     await f.page.evaluate(() => { __targetRefreshCalls = []; });
     await f.page.click('#map-retry');
-    await until(() => pending.length === 2, 'targeted Retry must request exactly the two failed archive ranges');
+    await until(() => pending.length === 2, 'targeted Retry must hold both failed archive ranges');
     await warning(f.page);
-    send(take('948/1850').res, 503, 'text/plain', 'fast failure during the same targeted batch');
+    send(take('947/1850').res, 503, 'text/plain', 'A fails while retried B remains held');
     await f.page.waitForFunction(() => [...__recoveryClock.timers.values()].some(t => t.active), null, { timeout: WAIT });
-    await f.page.click('#map-retry'); await f.page.click('#map-retry');
+    const expectedAfterOnline = Math.min((await f.page.evaluate(() => __recoveryClock.scheduled.at(-1))) * 2, 60000);
+    assert.equal(expectedAfterOnline, 8000, 'manual dispatch must advance the fresh 2000 ms failure budget to 4000 ms');
+    const onlineBefore = reads.length;
+    await f.page.evaluate(() => dispatchEvent(new Event('online')));
+    await until(() => reads.length > onlineBefore && pending.some(entry => entry.key === '947/1850'), 'online must dispatch eligible A while retry B remains held');
+    assert.deepEqual(reads.slice(onlineBefore), ['947/1850']);
+    const emptyBefore = reads.length, timerHistory = await f.page.evaluate(() => __recoveryClock.scheduled.length);
+    await f.page.evaluate(() => { dispatchEvent(new Event('online')); dispatchEvent(new Event('online')); });
     await f.page.waitForTimeout(100);
-    const calls = await f.page.evaluate(() => __targetRefreshCalls.map(call => ({ source: call.source,
-      tiles: call.tiles?.map(c => `${c.z}/${c.x}/${c.y}`).sort() })));
-    assert.deepEqual(calls, [{ source: 'fixture', tiles: coords.map(c => `${c.z}/${c.x}/${c.y}`).sort() }], 'manual Retry must dispatch the failed coordinate set once, regardless of error arrival order');
-    assert.deepEqual(reads.sort(), ['947/1850', '948/1850'], 'repeated clicks must not duplicate an in-flight batch after a fast re-failure');
+    assert.equal(reads.length, emptyBefore, 'empty online dispatch must not duplicate either loading canonical tile');
+    assert.equal(await f.page.evaluate(() => __recoveryClock.scheduled.length), timerHistory, 'empty online dispatch must not advance backoff');
+    const beforeSecondFailure = await f.page.evaluate(() => __recoveryClock.scheduled.length);
+    send(take('947/1850').res, 503, 'text/plain', 'A fails again while B remains held');
+    await f.page.waitForFunction(n => __recoveryClock.scheduled.length > n, beforeSecondFailure, { timeout: WAIT });
+    assert.equal(await f.page.evaluate(() => __recoveryClock.scheduled.at(-1)), expectedAfterOnline, 'only the nonempty online dispatch may advance backoff; empty online calls must not change the next actual delay');
+    const manualBefore = reads.length;
+    await f.page.click('#map-retry');
+    await until(() => reads.length > manualBefore && pending.some(entry => entry.key === '947/1850'), 'manual Retry must also dispatch eligible A while B remains held');
+    assert.deepEqual(reads.slice(manualBefore), ['947/1850']);
+    const calls = await f.page.evaluate(() => __targetRefreshCalls.map(call => ({ source: call.source, tiles: call.tiles?.map(c => `${c.z}/${c.x}/${c.y}`).sort() })));
+    assert.deepEqual(calls, [{ source: 'fixture', tiles: coords.map(c => `${c.z}/${c.x}/${c.y}`).sort() },
+      { source: 'fixture', tiles: ['12/947/1850'] }, { source: 'fixture', tiles: ['12/947/1850'] }]);
     await warning(f.page);
     const a = take('947/1850'); archiveResponse(root, a.req, a.res);
-    await settledFrame(f.page);
-    reads = [];
-    await f.page.click('#map-retry');
-    await until(() => pending.length === 1, 'only the remaining failed coordinate must be retried');
-    assert.deepEqual(reads, ['948/1850']);
+    await f.page.waitForFunction(() => __nativeCoordinateSuccess.some(event => event.x === 947 && event.y === 1850), null, { timeout: WAIT });
+    await warning(f.page);
     const b = take('948/1850'); archiveResponse(root, b.req, b.res);
     await allLoaded(f.page); await settledFrame(f.page); await warning(f.page, false);
     // A success outside an application Retry batch must remove A from the queued set.

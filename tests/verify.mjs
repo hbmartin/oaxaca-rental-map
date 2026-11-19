@@ -383,7 +383,7 @@ const checks = {
 
   async ctorfail(browser) {
     // WebGL passes the precheck, then the MapLibre constructor fails to get a context.
-    const init = () => { const orig = HTMLCanvasElement.prototype.getContext; let n = 0; HTMLCanvasElement.prototype.getContext = function (t, ...a) { if (/webgl/.test(t) && n++ > 0) return null; return orig.call(this, t, ...a); }; };
+    const init = () => { const orig = HTMLCanvasElement.prototype.getContext; let n = 0; window.__allowConstructor = false; HTMLCanvasElement.prototype.getContext = function (t, ...a) { if (/webgl/.test(t) && n++ > 0 && !window.__allowConstructor) return null; return orig.call(this, t, ...a); }; };
     const { ctx, page } = await newPage(browser, { init });
     await page.goto(url());
     await waitRetry(page);
@@ -393,6 +393,10 @@ const checks = {
     const p = await probe(page);
     const leftovers = await page.locator('.leaflet-gl-layer').count();
     record('constructor failure cleans up (no stray container, no errors on pan/zoom)', /unavailable/.test(p.status) && !p.hasLayer && leftovers === 0 && !page.errors.length, `containers ${leftovers}, errors: ${page.errors.join(' | ') || 'none'}`);
+    await page.evaluate(() => { window.__allowConstructor = true; });
+    await page.click('#map-retry'); await waitReady(page);
+    const recovered = await probe(page);
+    record('constructor failure recovers on a fresh Retry after context creation is restored', recovered.ready && recovered.hasGL && !recovered.status && !page.errors.length);
     await ctx.close();
   },
 
