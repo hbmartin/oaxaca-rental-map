@@ -533,10 +533,12 @@ var MAPLIBRE_JS = "https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js";
 var ADAPTER_JS = "https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js";
 var STREET_STYLE = "https://tiles.openfreemap.org/styles/positron";
 var HIDDEN_LABELS = {waterway:true, water_name:true, aerodrome_label:true}; // Positron symbol source-layers
-var SLOW_MS = 20000;
-var streetCredit = '<a href="https://openfreemap.org/">OpenFreeMap</a> · <a href="https://openmaptiles.org/">© OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a>';
-// streetPhase: "off" (none, failed or unsupported), "loading", "ready", or "lost" (WebGL context lost after ready)
-var streetPhase = "off", streetLayer = null, streetAttempt = 0, slowTimer = null, mapLibs = null, StreetLayer = null;
+var SLOW_MS = 20000, TILE_RETRY_MIN = 2000, TILE_RETRY_MAX = 60000;
+var streetCredit = '<a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> · <a href="https://openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>';
+// streetPhase: "off" (none, failed or unsupported), "loading", "ready", or "lost" (WebGL context lost; the layer may restore itself)
+var streetPhase = "off", streetLayer = null, streetAttempt = 0, StreetLayer = null;
+var slowTimer = null, slowLeft = null, slowSince = 0; // visible ms left before the slow message; null once shown or stopped
+var retryTilesNow = null; // set by the current street layer while failed tiles wait for a retry
 
 function hasWebGL(){
   try {
@@ -546,40 +548,59 @@ function hasWebGL(){
     return !!ctx;
   } catch (e) { return false; }
 }
-function loadScript(src){
-  return new Promise(function(resolve, reject){
-    var s = document.createElement("script");
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = function(){ s.remove(); reject(new Error("Could not load " + src)); };
-    document.head.appendChild(s);
+// One request per URL. A failed request is forgotten so Retry fetches it again. A finished one is reused,
+// even a script that ran without defining anything. Retry (fresh) also abandons a request that is still
+// pending, since a stalled CDN request may never settle.
+var requests = {};
+function request(url, fresh){
+  var r = requests[url];
+  if (r && (r.done || !fresh)) return r.promise;
+  if (r) r.el.remove();
+  r = requests[url] = {done:false};
+  r.promise = new Promise(function(resolve, reject){
+    var el = r.el = document.createElement(/\.css$/.test(url) ? "link" : "script");
+    if (el.tagName === "LINK") { el.rel = "stylesheet"; el.href = url; } else el.src = url;
+    el.onload = function(){ r.done = true; resolve(); };
+    el.onerror = function(){
+      el.remove();
+      if (requests[url] === r) delete requests[url];
+      reject(new Error("Could not load " + url));
+    };
+    // In <head>, so the stylesheet still precedes the Leaflet and page styles in the cascade.
+    document.head.appendChild(el);
   });
+  return r.promise;
 }
-function loadMaplibre(){
-  if (!document.querySelector('link[href="' + MAPLIBRE_CSS + '"]')) {
-    // In <head>, so it still precedes the Leaflet and page styles in the cascade.
-    var css = document.createElement("link"); css.rel = "stylesheet"; css.href = MAPLIBRE_CSS;
-    document.head.appendChild(css);
-  }
-  if (!mapLibs) {
-    mapLibs = (window.maplibregl ? Promise.resolve() : loadScript(MAPLIBRE_JS))
-      .then(function(){ return L.MaplibreGL ? null : loadScript(ADAPTER_JS); })
-      .then(function(){ if (!L.MaplibreGL) throw new Error("MapLibre adapter did not load"); });
-    mapLibs.catch(function(){ mapLibs = null; }); // let Retry fetch again
-  }
-  return mapLibs;
+// Resolves once the stylesheet has applied and both scripts have run.
+function loadMaplibre(fresh){
+  var js = (window.maplibregl ? Promise.resolve() : request(MAPLIBRE_JS, fresh))
+    .then(function(){
+      // The adapter binds to window.maplibregl when it runs, so never load it without one.
+      if (!window.maplibregl) { var e = new Error("MapLibre did not run"); e.unsupported = true; throw e; }
+      return L.MaplibreGL ? null : request(ADAPTER_JS, fresh);
+    })
+    .then(function(){ if (!L.MaplibreGL) throw new Error("MapLibre adapter did not load"); });
+  return Promise.all([request(MAPLIBRE_CSS, fresh), js]);
 }
-// Guards around adapter 0.1.4 internals; recheck both when the adapter version changes.
+// Overrides of adapter 0.1.4 internals; recheck both when the adapter version changes.
 function streetLayerClass(){
   return StreetLayer || (StreetLayer = L.MaplibreGL.extend({
     // A failed WebGL constructor leaves no GL map, but its container is already in the pane.
     onRemove: function(m){
       if (this._glMap) L.MaplibreGL.prototype.onRemove.call(this, m); else L.DomUtil.remove(this._container);
     },
-    // The adapter finishes zoom and resize work on the next frame; skip it if the layer was removed meanwhile.
-    _transitionEnd: function(e){
-      var self = this;
-      L.Util.requestAnimFrame(function(){ if (self._map && self._glMap) L.MaplibreGL.prototype._transitionEnd.call(self, e); });
+    // The adapter's body (also reached through _resize), copied so the guard runs in the same frame as the
+    // work: the adapter defers this to the next frame without checking the layer is still on the map.
+    _transitionEnd: function(){
+      L.Util.requestAnimFrame(function(){
+        if (!this._map || !this._glMap) return;
+        var zoom = this._map.getZoom(), center = this._map.getCenter();
+        var offset = this._map.latLngToContainerPoint(this._map.getBounds().getNorthWest());
+        this._resizeContainer();
+        L.DomUtil.setTransform(this._glMap._actualCanvas, offset, 1);
+        this._glMap.once("moveend", L.Util.bind(this._zoomEnd, this));
+        this._glMap.jumpTo({center:center, zoom:zoom - 1});
+      }, this);
     }
   }));
 }
@@ -594,7 +615,6 @@ function fitKey(){ $("key").style.bottom = (map.attributionControl.getContainer(
 function setCredits(){
   credit("Natural Earth", map.hasLayer(simplifiedMap));
   credit(streetCredit, !!streetLayer); // the GL canvas can show OSM data as soon as it is on the map
-  fitKey();
 }
 function streetStatus(message, retry){
   $("map-status").hidden = !message;
@@ -606,32 +626,36 @@ function showSimplified(on){
   $("mapwrap").classList.toggle("streets-ready", !on);
   setCredits();
 }
-// Counts only time the page is visible: MapLibre renders and requests tiles from
+// Adds up only the time the page is visible: MapLibre renders and requests tiles from
 // requestAnimationFrame, which a background tab does not run.
-function armSlowTimer(){
-  clearTimeout(slowTimer);
-  if (streetPhase !== "loading" || document.hidden) return;
+function slowClock(){
+  if (slowTimer) { clearTimeout(slowTimer); slowTimer = null; slowLeft -= Date.now() - slowSince; }
+  if (slowLeft == null || streetPhase !== "loading" || document.hidden) return;
+  slowSince = Date.now();
   slowTimer = setTimeout(function(){
+    slowTimer = null; slowLeft = null;
     if (streetPhase === "loading") streetStatus("Streets are slow to load. Showing a simplified map for now.", true);
-  }, SLOW_MS);
+  }, Math.max(0, slowLeft));
 }
-document.addEventListener("visibilitychange", armSlowTimer);
+function stopSlowClock(){ clearTimeout(slowTimer); slowTimer = null; slowLeft = null; }
+document.addEventListener("visibilitychange", slowClock);
 
 function dropStreets(){
   streetAttempt++;
-  clearTimeout(slowTimer);
+  stopSlowClock();
+  retryTilesNow = null;
   streetPhase = "off";
   if (streetLayer) { var old = streetLayer; streetLayer = null; old.remove(); }
   setCredits();
 }
-function streetFallback(message){
+function streetFallback(message, retry){
   dropStreets();
   showSimplified(true);
-  streetStatus(message || "Streets unavailable. Showing a simplified map.", true);
+  streetStatus(message || "Streets unavailable. Showing a simplified map.", retry !== false);
 }
 function streetsReady(layer){
   if (streetLayer !== layer) return;
-  clearTimeout(slowTimer);
+  stopSlowClock();
   streetPhase = "ready";
   showSimplified(false);
   streetStatus("", false);
@@ -648,41 +672,82 @@ function addStreetLayer(){
       if (l.type === "symbol" && HIDDEN_LABELS[l["source-layer"]]) gl.setLayoutProperty(l.id, "visibility", "none");
     });
   });
-  gl.once("idle", function(){ streetsReady(layer); });
+  // Ready means drawn. MapLibre keeps loading while the WebGL context is lost and can reach idle with
+  // nothing on the canvas, so idle counts only while the layer has its context.
+  var contextLost = false;
+  function readyOnIdle(){ gl.once("idle", function(){ if (!contextLost) streetsReady(layer); }); }
+  readyOnIdle();
+
+  // MapLibre never re-requests a failed tile while it stays in view, and the simplified map is gone by then,
+  // so failed tiles are refreshed here, waiting longer after each round that still fails.
+  var failedTiles = {}, retryTimer = null, retryDelay = TILE_RETRY_MIN;
+  function retryTiles(){
+    clearTimeout(retryTimer); retryTimer = null;
+    if (streetLayer !== layer) return;
+    var batch = failedTiles; failedTiles = {};
+    Object.keys(batch).forEach(function(source){
+      var tiles = Object.keys(batch[source]).map(function(k){ return batch[source][k]; });
+      try { gl.refreshTiles(source, tiles); } catch (err) { console.warn("Street tile retry failed", err); }
+    });
+    retryDelay = Math.min(retryDelay * 2, TILE_RETRY_MAX);
+  }
+  function queueTileRetry(e){
+    var c = e.tile.tileID.canonical, tiles = failedTiles[e.sourceId] || (failedTiles[e.sourceId] = {});
+    tiles[c.z + "/" + c.x + "/" + c.y] = {x:c.x, y:c.y, z:c.z};
+    if (!retryTimer) retryTimer = setTimeout(retryTiles, retryDelay);
+    retryTilesNow = function(){ if (retryTimer) retryTiles(); };
+  }
+  gl.on("idle", function(){ if (!retryTimer) retryDelay = TILE_RETRY_MIN; }); // errored tiles count as loaded
+
   gl.on("error", function(e){
     if (streetLayer !== layer) return;
     // Before the first full render, any failure (style, sprite, glyphs, tiles) would leave a broken basemap.
-    // After it, MapLibre retries tiles on its own, so one failed request is not worth dropping the streets.
-    if (streetPhase === "loading") { console.warn("Street basemap failed to load", e && e.error); streetFallback(); }
-    else console.warn("Street basemap request failed", e && e.error);
+    // After it, a failed tile is retried; other failed requests only cost some labels or icons.
+    if (streetPhase === "loading") { console.warn("Street basemap failed to load", e && e.error); streetFallback(); return; }
+    console.warn("Street basemap request failed", e && e.error);
+    if (e && e.tile && e.sourceId) queueTileRetry(e);
   });
   gl.on("webglcontextlost", function(){
-    if (streetLayer !== layer || streetPhase !== "ready") return;
+    contextLost = true;
+    // While loading too, so the page neither declares a blank canvas ready nor blames the network.
+    if (streetLayer !== layer || (streetPhase !== "ready" && streetPhase !== "loading")) return;
+    stopSlowClock();
     streetPhase = "lost";
     showSimplified(true);
     streetStatus("Street map paused. Showing a simplified map.", true);
   });
   gl.on("webglcontextrestored", function(){
-    if (streetLayer === layer) gl.once("idle", function(){ streetsReady(layer); });
+    contextLost = false;
+    if (streetLayer === layer) readyOnIdle();
   });
 }
-function loadStreets(){
+function loadStreets(fresh){
   if (streetPhase === "loading" || streetPhase === "ready") return;
   if (!hasWebGL()) { streetStatus("Street map needs WebGL, which isn't available here. Showing a simplified map.", false); return; }
   var attempt = ++streetAttempt;
   streetPhase = "loading";
   streetStatus("Loading streets…", false);
-  armSlowTimer();
-  loadMaplibre().then(function(){
+  slowLeft = SLOW_MS;
+  slowClock();
+  loadMaplibre(fresh).then(function(){
     if (attempt === streetAttempt) addStreetLayer();
   }).catch(function(e){
     if (attempt !== streetAttempt) return;
     console.warn("Street basemap unavailable", e);
-    streetFallback();
+    if (e && e.unsupported) streetFallback("Street map isn't supported in this browser. Showing a simplified map.", false);
+    else streetFallback();
   });
 }
 setCredits();
-$("map-retry").addEventListener("click", function(){ dropStreets(); loadStreets(); });
+// Measures the attribution whenever it rewraps: credit changes, resizes and the web font swapping in.
+new ResizeObserver(fitKey).observe(map.attributionControl.getContainer());
+window.addEventListener("online", function(){ if (retryTilesNow) retryTilesNow(); });
+$("map-retry").addEventListener("click", function(){
+  // Check first: a paused street layer can still restore itself if WebGL is only briefly unavailable.
+  if (!hasWebGL()) { streetStatus("WebGL isn't available right now. Showing a simplified map.", true); return; }
+  dropStreets();
+  loadStreets(true);
+});
 [2000, 5000, 10000].forEach(function(r){
   L.circle(ZOCALO, {radius:r, interactive:false, className:"ring"}).addTo(map);
   var north = [ZOCALO[0] + r / 110700, ZOCALO[1]];
@@ -937,7 +1002,7 @@ zoomClass();
 layoutPins();
 renderList();
 updatePinText();
-window.addEventListener("resize", function(){ map.invalidateSize(); fitKey(); });
+window.addEventListener("resize", function(){ map.invalidateSize(); });
 loadStreets();
 })();
 </script>
