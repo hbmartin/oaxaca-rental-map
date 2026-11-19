@@ -9,9 +9,9 @@ Both sources were read on 18 Nov 2026. Prices, availability and lease status wil
 
 ## Viewing it
 
-Open `index.html` in any modern browser. It has no build step, server requirement, or API key. It loads Leaflet 1.9.4, MapLibre GL JS 5.6.1 and the MapLibre–Leaflet adapter 0.0.22 from CDNs, plus two typefaces from Google Fonts.
+Open `index.html` in any modern browser. It has no build step, server requirement, or API key. It loads Leaflet 1.9.4 and two typefaces from Google Fonts up front. MapLibre GL JS 5.6.1 and the MapLibre–Leaflet adapter 0.1.4 are fetched from unpkg after the page is running, and only in browsers with WebGL.
 
-The default basemap is [OpenFreeMap Positron](https://openfreemap.org/), with detailed streets, buildings, and street/place names. POI and water-feature name labels are hidden to keep rental pins prominent. Positron stays light regardless of the surrounding interface's system theme. Loading street tiles requires an internet connection and WebGL. If the renderer or tiles fail, the page shows its embedded simplified map and a Retry button (Reload if a browser library failed to load); listing filters, pins, and uncertainty circles remain usable. The embedded geometry is a fallback, not a full offline installation: the browser libraries and fonts still require a network connection or a browser cache.
+The default basemap is [OpenFreeMap Positron](https://openfreemap.org/), with detailed streets, buildings, and street/place names. Water-feature and airport name labels are hidden to keep rental pins prominent; the page draws its own airport marker. Positron stays light regardless of the system theme, so in dark mode the map panel switches to the light palette while the streets are showing. Loading street tiles requires an internet connection and WebGL. The embedded simplified map stays on screen until the streets have rendered. If the street map can't load, or its WebGL context is lost, the page shows the simplified map and a Retry button; if loading is merely slow, it says so and keeps trying. Listing filters, pins, and uncertainty circles remain usable throughout. The embedded geometry is a fallback, not a full offline installation: the browser libraries and fonts still require a network connection or a browser cache.
 
 ## What the page does
 
