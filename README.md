@@ -77,11 +77,14 @@ Listings live in the `LISTINGS` array inside the `<script>` near the bottom of `
 
 `tests/verify.mjs` drives the page in headless Chromium and checks the street basemap end to end. It covers alignment while panning and zooming, credits, hidden labels, that every basemap request stays on this site and succeeds across the whole map, opening the file from disk, dark mode, failure and Retry paths (blocked libraries, style or tile archive, no WebGL, a failing WebGL constructor, context loss), boundary toggling, the phone layout, and slow or background-tab loading.
 
+The local `recovery` group uses real HTTP fault fixtures to check stalled and failed stylesheet retries, late execution of abandoned scripts, archive-header failures during WebGL loss, successful context restoration, and tile retry backoff while panning. It controls only the retry timers in the test browser to check the two-second minimum, sixty-second cap, online recovery and reset after successful loading without waiting several minutes. It is included in the default local run and excluded when `BASE_URL` selects a deployed copy.
+
 ```sh
 npm install
 npx playwright install chromium   # once; or set PW_CHANNEL=chrome to use installed Google Chrome
-npm test                          # about 90 s; starts its own local server
-npm test -- ready,dark            # only some groups: align, ready, selfhost, file, dark, libs, archive, nowebgl, ctorfail, boundaries, phone, slow
+npm test                          # full suite; starts its own local server
+npm test -- recovery,libs,archive,ready  # focused recovery and loading checks
+npm test -- ready,dark            # other groups: align, selfhost, file, nowebgl, ctorfail, boundaries, phone, slow
 BASE_URL=https://example.org/map/ npm test   # against a deployed copy
 ```
 
