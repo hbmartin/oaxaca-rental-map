@@ -10,7 +10,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PMTILES_LICENSE = 'https://raw.githubusercontent.com/protomaps/PMTiles/5897a82a16b233abac7b8f339c019b931c2bbf54/LICENSE';
 
 const LIBS = [
-  { pkg: 'maplibre-gl', dir: 'maplibre-gl', files: ['dist/maplibre-gl.js', 'dist/maplibre-gl.css', 'LICENSE.txt'] },
+  // Native ESM resolves its worker and shared module next to the entry; keep their names together.
+  { pkg: 'maplibre-gl', dir: 'maplibre-gl', files: [
+    'dist/maplibre-gl.mjs', 'dist/maplibre-gl-worker.mjs', 'dist/maplibre-gl-shared.mjs',
+    'dist/maplibre-gl.css', 'LICENSE.txt',
+  ] },
   { pkg: '@maplibre/maplibre-gl-leaflet', dir: 'maplibre-gl-leaflet', files: ['leaflet-maplibre-gl.js', 'LICENSE'] },
   // The npm package ships without its license file; the repository's applies to the JS library.
   { pkg: 'pmtiles', dir: 'pmtiles', files: ['dist/pmtiles.js'], licenseUrl: PMTILES_LICENSE },

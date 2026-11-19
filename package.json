@@ -11,7 +11,7 @@
   },
   "devDependencies": {
     "@maplibre/maplibre-gl-leaflet": "0.1.4",
-    "maplibre-gl": "5.6.1",
+    "maplibre-gl": "6.19.0",
     "playwright": "1.64.1",
     "pmtiles": "4.5.0"
   }

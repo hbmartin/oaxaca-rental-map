@@ -5,8 +5,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { startServer } from '../scripts/serve.mjs';
 
-const CSS_PATH = '/vendor/maplibre-gl-5.6.1/maplibre-gl.css';
-const MAPLIBRE_PATH = '/vendor/maplibre-gl-5.6.1/maplibre-gl.js';
+const CSS_PATH = '/vendor/maplibre-gl-6.19.0/maplibre-gl.css';
+const MAPLIBRE_PATH = '/vendor/maplibre-gl-6.19.0/maplibre-gl.mjs';
+const MAPLIBRE_DIR = '/vendor/maplibre-gl-6.19.0/';
 const ARCHIVE_PATH = '/basemap/oaxaca.pmtiles';
 const TILE_PATH = '/recovery-tiles/';
 const WAIT = 12000;
@@ -112,11 +113,24 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
       ['https://fonts.gstatic.com/**', route => route.abort()],
     ] });
     cleanup.push(() => ctx.close());
-    // Long native stylesheet responses must not hold page.goto's load event open.
+    // Long native stylesheet or module responses must not hold page.goto's load event open.
     await page.goto(base + '/index.html', { waitUntil: 'domcontentloaded' });
     return { page, ctx, base, held, requests };
   }
   const cleanPage = page => assert.deepEqual(page.errors, [], 'the page must not throw JavaScript errors');
+  const scriptRequests = fixture => fixture.requests.filter(r => /\.m?js$/.test(r.pathname) && (
+    r.pathname === MAPLIBRE_PATH || r.pathname === '/vendor/maplibre-gl-leaflet-0.1.4/leaflet-maplibre-gl.js' ||
+    r.pathname === '/vendor/pmtiles-4.5.0/pmtiles.js'
+  ));
+  async function usableFallback(page) {
+    const fallback = await probe(page);
+    assert.ok(!fallback.ready && fallback.retry && /Natural Earth/.test(fallback.credits), 'failure must leave the simplified map and Retry available');
+    assert.ok(await page.locator('.pin-host:not([hidden])').count(), 'listing pins must remain visible');
+    const row = page.locator('#list .row-btn').first();
+    await row.click();
+    assert.equal(await row.getAttribute('aria-expanded'), 'true', 'listings must remain usable while streets cannot load');
+    await row.click();
+  }
   const glExists = page => page.waitForFunction(() => {
     let found = false;
     window.__map?.eachLayer(l => { if (l.getMaplibreMap?.()) found = true; });
@@ -135,9 +149,97 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
   }
   const allLoaded = page => page.waitForFunction(() => {
     let gl; __map.eachLayer(l => { if (l.getMaplibreMap) gl = l.getMaplibreMap(); });
-    const tiles = gl && Object.values(gl.style.sourceCaches.fixture?._tiles || {});
+    const tiles = gl?.style?.tileManagers.fixture?._inViewTiles.getAllTiles();
     return tiles?.length && tiles.every(tile => tile.state === 'loaded');
   }, null, { timeout: WAIT });
+
+  await run('a blocked ESM entry leaves usable listings and imports successfully on Retry', async cleanup => {
+    let imports = 0;
+    const f = await setup(cleanup, { intercept(req, res, url) {
+      if (url.pathname !== MAPLIBRE_PATH) return false;
+      if (++imports === 1) {
+        send(res, 503, 'text/javascript', 'temporary module failure');
+        return true;
+      }
+      return false;
+    } });
+    await waitRetry(f.page, WAIT);
+    assert.match((await probe(f.page)).status, /unavailable/);
+    await usableFallback(f.page);
+    await f.page.click('#map-retry');
+    await waitReady(f.page, WAIT);
+    assert.equal(imports, 2, 'Retry must issue a new native module request after an import failure');
+    const urls = f.requests.filter(r => r.pathname === MAPLIBRE_PATH).map(r => new URL(r.url, f.base));
+    assert.notEqual(urls[0].href, urls[1].href, 'a failed browser module-map entry must not poison Retry');
+    assert.ok(urls[1].searchParams.has('_streetRetry'));
+    cleanPage(f.page);
+    return 'a native module 503 leaves pins and listing controls working; a distinct Retry URL reaches ready';
+  });
+
+  await run('Retry bypasses a native stalled module import before its original response finishes', async cleanup => {
+    let original, imports = 0;
+    const f = await setup(cleanup, {
+      html: app.replace(/SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
+      intercept(req, res, url, held) {
+        if (url.pathname !== MAPLIBRE_PATH) return false;
+        if (++imports === 1) {
+          original = res; held.add(res);
+          res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'public,max-age=31536000' });
+          res.flushHeaders();
+          return true;
+        }
+        return false;
+      },
+    });
+    await waitRetry(f.page, WAIT);
+    await usableFallback(f.page);
+    await f.page.click('#map-retry');
+    await waitReady(f.page, WAIT);
+    assert.equal(imports, 2, 'Retry must import a replacement while the original module is still pending');
+    const urls = f.requests.filter(r => r.pathname === MAPLIBRE_PATH).map(r => new URL(r.url, f.base));
+    assert.notEqual(urls[0].href, urls[1].href);
+    assert.ok(urls[1].searchParams.has('_streetRetry'));
+    assert.equal(original.writableEnded, false, 'the replacement must recover without completing the held response');
+    cleanPage(f.page);
+    return 'the original HTTP 200 module body remains held; a second native import with _streetRetry reaches ready';
+  });
+
+  await run('a blocked same-origin module worker leaves a fallback and recovers on Retry', async cleanup => {
+    let blocked = true, workerRequests = 0;
+    const f = await setup(cleanup, {
+      html: app.replace(/SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
+      init: () => {
+        const NativeWorker = window.Worker;
+        window.__recoveryWorkers = [];
+        window.Worker = class extends NativeWorker {
+          constructor(url, options) {
+            window.__recoveryWorkers.push({ url: new URL(url, location.href).href, type: options?.type });
+            super(url, options);
+          }
+        };
+      },
+      intercept(req, res, url) {
+        if (!url.pathname.startsWith(MAPLIBRE_DIR) || !/worker.*\.mjs$/.test(url.pathname)) return false;
+        workerRequests++;
+        if (!blocked) return false;
+        send(res, 503, 'text/javascript', 'temporary worker module failure');
+        return true;
+      },
+    });
+    await until(() => workerRequests > 0, 'the fixture must block an actual HTTP module-worker request');
+    await waitRetry(f.page, WAIT);
+    await usableFallback(f.page);
+    blocked = false;
+    await f.page.click('#map-retry');
+    await waitReady(f.page, WAIT);
+    const workers = await f.page.evaluate(() => window.__recoveryWorkers);
+    assert.ok(workers.length >= 2, 'Retry must construct a replacement worker');
+    assert.ok(workers.every(worker => new URL(worker.url).origin === f.base && worker.type === 'module'),
+      'every worker must load as a module from this site, without a blob or remote worker URL');
+    assert.ok(workerRequests > 1, 'the unblocked replacement must make a fresh worker HTTP request');
+    cleanPage(f.page);
+    return 'real worker-module HTTP 503s leave pins and listing controls usable; same-origin module workers recover on Retry';
+  });
 
   await run('Retry bypasses a native stalled CSS response and reuses successful scripts', async cleanup => {
     let original, cssRequests = 0;
@@ -156,18 +258,18 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     });
     await waitRetry(f.page, WAIT);
     await f.page.waitForFunction(() => window.maplibregl && L.MaplibreGL && window.pmtiles, null, { timeout: WAIT });
-    const before = f.requests.filter(r => r.pathname.startsWith('/vendor/') && /\.js$/.test(r.pathname)).length;
-    assert.equal(before, 3, 'all three street-map scripts should have succeeded before Retry');
+    const before = scriptRequests(f).length;
+    assert.ok(before >= 3, 'the runtime modules, adapter and PMTiles should have succeeded before Retry');
     await f.page.click('#map-retry');
     await waitReady(f.page, WAIT);
-    const after = f.requests.filter(r => r.pathname.startsWith('/vendor/') && /\.js$/.test(r.pathname)).length;
+    const after = scriptRequests(f).length;
     assert.equal(cssRequests, 2, 'Retry must cause a distinct native HTTP stylesheet request');
     assert.equal(after, before, 'successful scripts must not be downloaded again');
     const retryURL = new URL(f.requests.filter(r => r.pathname === CSS_PATH)[1].url, f.base);
     assert.ok(retryURL.searchParams.has('_streetRetry'), 'the stalled stylesheet retry needs a distinct network URL');
     assert.equal(original.writableEnded, false, 'the page must recover before the original held response ends');
     cleanPage(f.page);
-    return 'HTTP 200 body remains held; a second CSS URL reaches ready; all three scripts downloaded once';
+    return 'HTTP 200 body remains held; a second CSS URL reaches ready; successful modules and classic scripts are reused';
   });
 
   await run('Retry stays independent of a stalled CSS response after an intervening 503', async cleanup => {
@@ -242,7 +344,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     return 'the URL remains a stylesheet; existing=1 and #test survive the distinct retry URL';
   });
 
-  await run('an initial archive failure during WebGL loss tears down and remains retryable', async cleanup => {
+  await run('an initial archive failure during WebGL loss keeps a fallback and remains retryable after restore', async cleanup => {
     let first;
     const f = await setup(cleanup, {
       style: base => fixtureStyle(base, { type: 'vector', url: 'pmtiles://basemap/oaxaca.pmtiles' }),
@@ -255,6 +357,11 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     assert.match(first.req.headers.range || '', /^bytes=0-/, 'the held request must be the initial archive header');
     await loseContext(f.page);
     send(first.res, 503, 'text/plain', 'initial archive header failure');
+    // MapLibre 6 destroys its style when the context is lost, so source events can no longer
+    // reach the removed style. The paused fallback must stay usable until reconstruction.
+    await usableFallback(f.page);
+    assert.ok(!(await probe(f.page)).ready, 'the failed archive must not declare a lost-context map ready');
+    await f.page.evaluate(() => __recoveryLose.restoreContext());
     await f.page.waitForFunction(() => {
       let layer = false; __map.eachLayer(l => { if (l.getMaplibreMap) layer = true; });
       return !layer && /unavailable/.test(document.getElementById('map-status-text').textContent);
@@ -264,10 +371,10 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     await f.page.click('#map-retry');
     await waitReady(f.page, WAIT);
     cleanPage(f.page);
-    return 'a real context loss plus header 503 removes the failed layer; Retry builds a working replacement';
+    return 'a real context loss plus header 503 keeps the fallback; reconstruction removes the failed layer and Retry recovers';
   });
 
-  await run('a late abandoned script cannot detach Retry from the adapter protocol cache', async cleanup => {
+  await run('a late abandoned module cannot replace the adapter runtime or detach Retry from its protocol cache', async cleanup => {
     let originalScript, scriptRequests = 0, archiveRequests = 0;
     const f = await setup(cleanup, {
       html: app.replace(/SLOW_MS\s*=\s*20000/, 'SLOW_MS = 200'),
@@ -296,10 +403,14 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     assert.ok(!(await probe(f.page)).hasLayer, 'the failed replacement map must be removed before testing another Retry');
     await f.page.evaluate(() => { window.__recoveryAdapterRuntime = window.maplibregl; });
     assert.equal(originalScript.destroyed, false, 'the abandoned script must still be a native pending response');
-    originalScript.end(fs.readFileSync(path.join(root, MAPLIBRE_PATH)));
-    await f.page.waitForFunction(() => window.maplibregl !== window.__recoveryAdapterRuntime, null, { timeout: WAIT });
-    // The late body really executes and replaces the browser global. Retry must nevertheless
-    // register its fresh PMTiles cache on the runtime captured by the successful adapter.
+    originalScript.end(Buffer.concat([
+      fs.readFileSync(path.join(root, MAPLIBRE_PATH)),
+      Buffer.from('\n;globalThis.__recoveryLateModuleExecuted = true;\n'),
+    ]));
+    await f.page.waitForFunction(() => window.__recoveryLateModuleExecuted, null, { timeout: WAIT });
+    assert.ok(await f.page.evaluate(() => window.maplibregl === window.__recoveryAdapterRuntime), 'the abandoned import must finish without replacing the active runtime');
+    // The late module really evaluates. Its obsolete loader continuation must not publish it,
+    // and Retry must register a fresh PMTiles cache on the successful adapter's runtime.
     await f.page.click('#map-retry');
     await waitReady(f.page, WAIT);
     assert.ok(archiveRequests >= 2, 'Retry must fetch the archive again instead of reusing the adapter runtime\'s rejected header promise');
@@ -308,7 +419,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     assert.equal(f.requests.filter(r => r.pathname === '/vendor/pmtiles-4.5.0/pmtiles.js').length, 1);
     assert.ok(await withGL(f.page, gl => gl instanceof window.__recoveryAdapterRuntime.Map), 'the working map must still use the runtime captured by its adapter');
     cleanPage(f.page);
-    return 'the original script executes late and changes the global; Retry replaces the correct rejected PMTiles cache and reaches ready';
+    return 'the original module evaluates late without replacing the active runtime; Retry replaces its rejected PMTiles cache and reaches ready';
   });
 
   await run('an initial successful archive load stays paused until WebGL restores', async cleanup => {
@@ -322,11 +433,12 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     });
     await until(() => first, 'the initial PMTiles header was not requested');
     await loseContext(f.page);
+    const receivedHeader = f.page.waitForResponse(response =>
+      new URL(response.url()).pathname === ARCHIVE_PATH && /^bytes=0-/.test(response.request().headers().range || ''));
     archiveResponse(root, first.req, first.res);
-    await f.page.waitForFunction(() => {
-      let gl; __map.eachLayer(l => { if (l.getMaplibreMap) gl = l.getMaplibreMap(); });
-      return gl?.style.sourceCaches.fixture?._source.loaded();
-    }, null, { timeout: WAIT });
+    const headerResponse = await receivedHeader;
+    assert.equal(headerResponse.status(), 206, 'the held header must resume with a successful byte-range response');
+    assert.equal(await headerResponse.finished(), null, 'the browser must finish receiving the successful header while WebGL is lost');
     const paused = await probe(f.page);
     assert.ok(!paused.ready && paused.hasGL && paused.retry && /paused/.test(paused.status));
     await f.page.evaluate(() => __recoveryLose.restoreContext());
@@ -335,7 +447,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     return 'successful metadata cannot hide the fallback while the context is lost; restoration reaches ready';
   });
 
-  await run('tile backoff survives idle during pending requests, caps, retries online and resets after recovery', async cleanup => {
+  await run('tile backoff survives an idle event during pending requests, caps, retries online and resets after recovery', async cleanup => {
     let mode = 'success', pending = [], tileRequests = 0;
     const release = status => {
       const batch = pending; pending = [];
@@ -354,7 +466,7 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     await allLoaded(f.page);
     await withGL(f.page, gl => {
       gl.on('idle', () => {
-        const tileStates = Object.values(gl.style.sourceCaches.fixture._tiles).map(t => t.state);
+        const tileStates = gl.style.tileManagers.fixture._inViewTiles.getAllTiles().map(t => t.state);
         if (tileStates.some(s => s === 'expired' || s === 'loading')) __recoveryClock.idle.push(tileStates);
       });
     });
@@ -373,17 +485,14 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
       await until(() => pending.length > 0, 'a scheduled retry should make a real HTTP tile request');
       await f.page.waitForFunction(() => {
         let gl; __map.eachLayer(l => { if (l.getMaplibreMap) gl = l.getMaplibreMap(); });
-        return Object.values(gl.style.sourceCaches.fixture._tiles).some(t => t.state === 'expired');
+        return gl.style.tileManagers.fixture._inViewTiles.getAllTiles().some(t => t.state === 'expired');
       }, null, { timeout: WAIT });
       const idleBefore = await f.page.evaluate(() => __recoveryClock.idle.length);
-      // These are ordinary Leaflet pans. The responses remain held until a real MapLibre idle
-      // is observed with expired tiles, reproducing the sourceErrored loaded() shortcut.
-      await f.page.evaluate(() => { window.__recoveryPan = setInterval(() => __map.panBy([1, 0], { animate: false }), 40); });
-      try {
-        await f.page.waitForFunction(n => __recoveryClock.idle.length > n, idleBefore, { timeout: WAIT });
-      } finally {
-        await f.page.evaluate(() => clearInterval(__recoveryPan));
-      }
+      // MapLibre 6 no longer naturally reports idle for the tile-error shortcut in 5.6.1.
+      // Inject the public idle event while actual HTTP responses remain held and the tiles
+      // are expired, preserving the application's regression check across that engine fix.
+      await withGL(f.page, gl => gl.fire('idle'));
+      await f.page.waitForFunction(n => __recoveryClock.idle.length > n, idleBefore, { timeout: WAIT });
       release(503);
     }
     await f.page.waitForFunction(n => __recoveryClock.scheduled.length > n, expected.length, { timeout: WAIT });
@@ -415,6 +524,6 @@ export async function runRecovery(browser, { root, record, newPage, probe, withG
     assert.equal(reset, 2000, 'a genuinely successful tile load must reset backoff');
     assert.ok((await f.page.evaluate(() => __recoveryClock.idle.length)) >= expected.length);
     cleanPage(f.page);
-    return `delays ${actual.join(', ')} ms; online causes native requests; loaded states reset the delay to ${reset} ms`;
+    return `delays ${actual.join(', ')} ms despite injected idle while native requests are held; online retries; loaded states reset to ${reset} ms`;
   });
 }
