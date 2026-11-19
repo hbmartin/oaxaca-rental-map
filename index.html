@@ -533,6 +533,9 @@ var MAPLIBRE_JS = "https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js";
 var ADAPTER_JS = "https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js";
 var STREET_STYLE = "https://tiles.openfreemap.org/styles/positron";
 var HIDDEN_LABELS = {waterway:true, water_name:true, aerodrome_label:true}; // Positron symbol source-layers
+// Positron's own label for the city sits on the page's Zócalo marker, which already marks the centre.
+var HIDDEN_CITIES = ["Oaxaca"]; // OSM name; its name_en is "Oaxaca City"
+var SHOW_PLACE = ["!", ["all", ["==", ["get", "class"], "city"], ["in", ["get", "name"], ["literal", HIDDEN_CITIES]]]];
 var SLOW_MS = 20000, TILE_RETRY_MIN = 2000, TILE_RETRY_MAX = 60000;
 var streetCredit = '<a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> · <a href="https://openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>';
 // streetPhase: "off" (none, failed or unsupported), "loading", "ready", or "lost" (WebGL context lost; the layer may restore itself)
@@ -669,7 +672,10 @@ function addStreetLayer(){
   var gl = layer.getMaplibreMap();
   gl.on("style.load", function(){
     gl.getStyle().layers.forEach(function(l){
-      if (l.type === "symbol" && HIDDEN_LABELS[l["source-layer"]]) gl.setLayoutProperty(l.id, "visibility", "none");
+      if (l.type !== "symbol") return;
+      if (HIDDEN_LABELS[l["source-layer"]]) gl.setLayoutProperty(l.id, "visibility", "none");
+      // Positron's place filters are all expressions, so the exclusion can be appended to them.
+      else if (l["source-layer"] === "place") gl.setFilter(l.id, l.filter ? ["all", l.filter, SHOW_PLACE] : SHOW_PLACE);
     });
   });
   // Ready means drawn. MapLibre keeps loading while the WebGL context is lost and can reach idle with

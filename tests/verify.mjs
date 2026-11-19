@@ -124,6 +124,19 @@ const checks = {
       .filter(l => l.type === 'symbol' && gl.getLayoutProperty(l.id, 'visibility') === 'none').map(l => l.id));
     record('water, waterway and airport labels are hidden; others kept', ['waterway_line_label', 'water_name_point_label', 'water_name_line_label', 'airport'].every(id => hidden.includes(id)) && hidden.length === 4, 'hidden: ' + hidden.join(', '));
 
+    // Positron's "Oaxaca City" label would sit on the page's Zócalo marker; other place labels stay.
+    const places = [];
+    for (const z of [12.5, 16]) {
+      await page.evaluate(z => window.__map.setView([17.0607, -96.7254], z, { animate: false }), z);
+      await page.waitForTimeout(2500);
+      places.push(...await withGL(page, gl => {
+        const layers = gl.getStyle().layers.filter(l => l['source-layer'] === 'place').map(l => l.id);
+        return gl.queryRenderedFeatures({ layers }).map(f => f.properties.class + ':' + f.properties.name);
+      }));
+    }
+    const oaxaca = places.filter(p => p === 'city:Oaxaca');
+    record('the city label for Oaxaca is hidden; other place labels still render', !oaxaca.length && places.includes('city:Santa Lucía del Camino'), `${places.length} place labels, Oaxaca rendered ${oaxaca.length}×`);
+
     // An error after ready must not drop the streets.
     await withGL(page, gl => gl.fire('error', { error: new Error('synthetic tile failure') }));
     await page.route(NET.tiles, r => r.abort());
