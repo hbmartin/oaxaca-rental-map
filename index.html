@@ -544,6 +544,7 @@ var streetCredit = '<a href="https://openmaptiles.org/" target="_blank" rel="noo
 var pmtilesProtocol = null;
 // streetPhase: "off" (none, failed or unsupported), "loading", "ready", or "lost" (WebGL context lost; the layer may restore itself)
 var streetPhase = "off", streetLayer = null, streetAttempt = 0, StreetLayer = null;
+var StreetAdapter = null, streetMaplibre = null; // the adapter class and the runtime its factory captured
 var slowTimer = null, slowLeft = null, slowSince = 0; // visible ms left before the slow message; null once shown or stopped
 var retryTilesNow = null; // set by the current street layer while failed tiles wait for a retry
 
@@ -556,17 +557,22 @@ function hasWebGL(){
   } catch (e) { return false; }
 }
 // One request per URL. A failed request is forgotten so Retry fetches it again. A finished one is reused,
-// even a script that ran without defining anything. Retry (fresh) also abandons a request that is still
-// pending, since a stalled CDN request may never settle.
-var requests = {};
+// even a script that ran without defining anything. Fresh retries get a unique fetch URL:
+// removing its element alone does not stop the browser from reusing the stalled in-flight resource.
+var requests = {}, requestSerial = 0;
 function request(url, fresh){
   var r = requests[url];
   if (r && (r.done || !fresh)) return r.promise;
+  var fetchUrl = new URL(url, document.baseURI);
   if (r) r.el.remove();
+  if (fresh) {
+    fetchUrl.searchParams.set("_streetRetry", Date.now().toString(36) + "-" + (++requestSerial));
+  }
   r = requests[url] = {done:false};
   r.promise = new Promise(function(resolve, reject){
-    var el = r.el = document.createElement(/\.css$/.test(url) ? "link" : "script");
-    if (el.tagName === "LINK") { el.rel = "stylesheet"; el.href = url; } else el.src = url;
+    // Detect the asset type from the path, before query parameters or fragments.
+    var el = r.el = document.createElement(/\.css$/.test(fetchUrl.pathname) ? "link" : "script");
+    if (el.tagName === "LINK") { el.rel = "stylesheet"; el.href = fetchUrl.href; } else el.src = fetchUrl.href;
     el.onload = function(){ r.done = true; resolve(); };
     el.onerror = function(){
       el.remove();
@@ -585,19 +591,27 @@ function loadMaplibre(fresh){
     .then(function(){
       // The adapter binds to window.maplibregl when it runs, so never load it without one.
       if (!window.maplibregl) { var e = new Error("MapLibre did not run"); e.unsupported = true; throw e; }
+      var adapter = (L.MaplibreGL ? Promise.resolve() : request(ADAPTER_JS, fresh)).then(function(){
+        // Capture immediately after the adapter runs, before waiting for PMTiles. An abandoned
+        // script may still execute later and replace either browser global; keep this pair together.
+        if (!StreetAdapter && L.MaplibreGL) {
+          StreetAdapter = L.MaplibreGL;
+          streetMaplibre = window.maplibregl;
+        }
+      });
       return Promise.all([
-        L.MaplibreGL ? null : request(ADAPTER_JS, fresh),
+        adapter,
         window.pmtiles ? null : request(PMTILES_JS, fresh)
       ]);
     })
     .then(function(){
-      if (!L.MaplibreGL) throw new Error("MapLibre adapter did not load");
+      if (!StreetAdapter) throw new Error("MapLibre adapter did not load");
       if (!window.pmtiles) throw new Error("PMTiles did not load");
       // pmtiles caches the archive header, a failed fetch included, so Retry starts with a new cache.
       if (!pmtilesProtocol || fresh) {
         pmtilesProtocol = new pmtiles.Protocol();
-        maplibregl.removeProtocol("pmtiles");
-        maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile);
+        streetMaplibre.removeProtocol("pmtiles");
+        streetMaplibre.addProtocol("pmtiles", pmtilesProtocol.tile);
       }
     });
   return Promise.all([request(MAPLIBRE_CSS, fresh), js]);
@@ -621,10 +635,10 @@ function loadStyle(){
 }
 // Overrides of adapter 0.1.4 internals; recheck both when the adapter version changes.
 function streetLayerClass(){
-  return StreetLayer || (StreetLayer = L.MaplibreGL.extend({
+  return StreetLayer || (StreetLayer = StreetAdapter.extend({
     // A failed WebGL constructor leaves no GL map, but its container is already in the pane.
     onRemove: function(m){
-      if (this._glMap) L.MaplibreGL.prototype.onRemove.call(this, m); else L.DomUtil.remove(this._container);
+      if (this._glMap) StreetAdapter.prototype.onRemove.call(this, m); else L.DomUtil.remove(this._container);
     },
     // The adapter's body (also reached through _resize), copied so the guard runs in the same frame as the
     // work: the adapter defers this to the next frame without checking the layer is still on the map.
@@ -714,8 +728,14 @@ function addStreetLayer(style){
   });
   // Ready means drawn. MapLibre keeps loading while the WebGL context is lost and can reach idle with
   // nothing on the canvas, so idle counts only while the layer has its context.
-  var contextLost = false;
-  function readyOnIdle(){ gl.once("idle", function(){ if (!contextLost) streetsReady(layer); }); }
+  var contextLost = false, hasRendered = false;
+  function readyOnIdle(){
+    gl.once("idle", function(){
+      if (contextLost || streetLayer !== layer) return;
+      hasRendered = true;
+      streetsReady(layer);
+    });
+  }
   readyOnIdle();
 
   // MapLibre never re-requests a failed tile while it stays in view, and the simplified map is gone by then,
@@ -737,13 +757,16 @@ function addStreetLayer(style){
     if (!retryTimer) retryTimer = setTimeout(retryTiles, retryDelay);
     retryTilesNow = function(){ if (retryTimer) retryTiles(); };
   }
-  gl.on("idle", function(){ if (!retryTimer) retryDelay = TILE_RETRY_MIN; }); // errored tiles count as loaded
+  // After a tile error MapLibre may report idle while refreshed tiles are still pending.
+  gl.on("idle", function(){
+    if (!retryTimer && gl.areTilesLoaded()) retryDelay = TILE_RETRY_MIN;
+  });
 
   gl.on("error", function(e){
     if (streetLayer !== layer) return;
-    // Before the first full render, any failure (style, sprite, glyphs, tiles) would leave a broken basemap.
+    // Until the first full render, failures are fatal even while WebGL is paused.
     // After it, a failed tile is retried; other failed requests only cost some labels or icons.
-    if (streetPhase === "loading") { console.warn("Street basemap failed to load", e && e.error); streetFallback(); return; }
+    if (!hasRendered) { console.warn("Street basemap failed to load", e && e.error); streetFallback(); return; }
     console.warn("Street basemap request failed", e && e.error);
     if (e && e.tile && e.sourceId) queueTileRetry(e);
   });

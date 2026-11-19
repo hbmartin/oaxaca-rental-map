@@ -1,6 +1,6 @@
 // Headless browser checks for the rental map's street basemap.
 //
-//   npm test                       all checks against a local server (about 90 s)
+//   npm test                       all checks against a local server
 //   npm test -- ready,dark         only the named groups (see GROUPS below)
 //   BASE_URL=https://… npm test    against a deployed copy instead of a local server
 //   PW_CHANNEL=chrome npm test     use installed Google Chrome instead of Playwright's Chromium
@@ -11,11 +11,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startServer } from '../scripts/serve.mjs';
+import { runRecovery } from './recovery.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'test-results');
-const GROUPS = ['align', 'ready', 'selfhost', 'file', 'dark', 'libs', 'archive', 'nowebgl', 'ctorfail', 'boundaries', 'phone', 'slow'];
-const ONLY = process.argv[2] ? process.argv[2].split(',') : GROUPS;
+const GROUPS = ['align', 'ready', 'selfhost', 'file', 'dark', 'libs', 'archive', 'nowebgl', 'ctorfail', 'boundaries', 'phone', 'slow', 'recovery'];
+const ONLY = process.argv[2] ? process.argv[2].split(',') : GROUPS.filter(g => g !== 'recovery' || !process.env.BASE_URL);
 
 // Requests the checks block or delay to simulate failures.
 const NET = {
@@ -87,6 +88,11 @@ const shot = (page, name) => page.screenshot({ path: path.join(OUT, name + '.png
 const url = () => BASE + 'index.html';
 
 const checks = {
+  async recovery(browser) {
+    if (process.env.BASE_URL) throw new Error('The recovery group needs local HTTP fault fixtures; unset BASE_URL to run it.');
+    await runRecovery(browser, { root: ROOT, record, newPage, probe, withGL, waitReady, waitRetry });
+  },
+
   async align(browser) {
     const { ctx, page } = await newPage(browser);
     await page.goto(url());

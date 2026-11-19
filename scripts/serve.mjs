@@ -25,9 +25,11 @@ function send(res, status, headers = {}, body = '') {
   res.end(body);
 }
 
-export function startServer(root, port = 0, host = '127.0.0.1') {
+// A synchronous interceptor may handle a request and return true; normal serving is unchanged otherwise.
+export function startServer(root, port = 0, host = '127.0.0.1', intercept = null) {
   root = path.resolve(root);
   const server = http.createServer((req, res) => {
+    if (intercept && intercept(req, res)) return;
     let rel;
     try { rel = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); } catch { return send(res, 400, {}, 'Bad request'); }
     // Never serve dotfiles or dot-directories such as .git.
