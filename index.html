@@ -316,7 +316,7 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
       <p>Listings, prices and lease status as posted on <a href="https://www.realestateoaxaca.com/rentals-residential" target="_blank" rel="noopener">realestateoaxaca.com/rentals-residential</a>, read 18 Nov 2026.</p>
       <p>Listings 13–19 are every rental tagged furnished (Amueblado) among the 104 results on <a href="https://propiedades.com/oaxaca-centro-oaxaca-de-juarez/renta" target="_blank" rel="noopener">propiedades.com's Oaxaca Centro rentals</a>, read 18 Nov 2026. Outdoor-space notes come from each listing's tags and the visible start of its description; the full descriptions were not readable. Contact those advertisers through each listing's page.</p>
       <p>Pins are approximate. Real Estate Oaxaca listings name a neighborhood or landmark, and Propiedades.com listings give a street but no exact map point, so each pin sits in the stated area and the dashed circle shows how far off it could be. Pins that would overlap are nudged apart, with a thin line back to their spot.</p>
-      <p>Street basemap: <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> Positron, using OpenMapTiles and OpenStreetMap data, with water-feature and airport name labels hidden. Municipal boundaries are generalized CONABIO 2023 geometry; use the map toggle to show or hide them. These are municipal limits, not colonia or property boundaries. A simplified embedded map using Natural Earth highways and built-up area appears if the street map cannot load. Distances are straight-line from the Zócalo. Dollar and peso conversions use the rate you set above.</p>
+      <p>Street basemap: <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>'s Positron style over a self-hosted <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> extract of <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> data, built with <a href="https://github.com/onthegomap/planetiler" target="_blank" rel="noopener">Planetiler</a>, with water-feature and airport name labels hidden. Municipal boundaries are generalized CONABIO 2023 geometry; use the map toggle to show or hide them. These are municipal limits, not colonia or property boundaries. A simplified embedded map using Natural Earth highways and built-up area appears if the street map cannot load. Distances are straight-line from the Zócalo. Dollar and peso conversions use the rate you set above.</p>
     </footer>
   </aside>
 </div>
@@ -525,16 +525,23 @@ $("boundaries").addEventListener("change", function(){
   savePrefs();
 });
 
-/* Street basemap. It draws beneath the Leaflet overlays. MapLibre and its Leaflet adapter load
-   only when WebGL is available, after the listings are already usable, and the embedded
-   simplified map stays on screen until the streets have rendered once. */
-var MAPLIBRE_CSS = "https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css";
-var MAPLIBRE_JS = "https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js";
-var ADAPTER_JS = "https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js";
-var STREET_STYLE = "https://tiles.openfreemap.org/styles/positron";
+/* Street basemap. It draws beneath the Leaflet overlays. Everything it needs is served from this
+   site: the map libraries in vendor/ (npm run vendor) and the tiles, style, fonts and sprites in
+   basemap/ (npm run build:basemap). The libraries load only when WebGL is available, after the
+   listings are already usable, and the embedded simplified map stays on screen until the streets
+   have rendered once. */
+var MAPLIBRE_CSS = "vendor/maplibre-gl-5.6.1/maplibre-gl.css";
+var MAPLIBRE_JS = "vendor/maplibre-gl-5.6.1/maplibre-gl.js";
+var ADAPTER_JS = "vendor/maplibre-gl-leaflet-0.1.4/leaflet-maplibre-gl.js";
+var PMTILES_JS = "vendor/pmtiles-4.5.0/pmtiles.js";
+var STREET_STYLE = "basemap/style.json";
 var HIDDEN_LABELS = {waterway:true, water_name:true, aerodrome_label:true}; // Positron symbol source-layers
+// Positron's own label for the city sits on the page's Zócalo marker, which already marks the centre.
+var HIDDEN_CITIES = ["Oaxaca"]; // OSM name; its name_en is "Oaxaca City"
+var SHOW_PLACE = ["!", ["all", ["==", ["get", "class"], "city"], ["in", ["get", "name"], ["literal", HIDDEN_CITIES]]]];
 var SLOW_MS = 20000, TILE_RETRY_MIN = 2000, TILE_RETRY_MAX = 60000;
-var streetCredit = '<a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> · <a href="https://openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>';
+var streetCredit = '<a href="https://openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a>';
+var pmtilesProtocol = null;
 // streetPhase: "off" (none, failed or unsupported), "loading", "ready", or "lost" (WebGL context lost; the layer may restore itself)
 var streetPhase = "off", streetLayer = null, streetAttempt = 0, StreetLayer = null;
 var slowTimer = null, slowLeft = null, slowSince = 0; // visible ms left before the slow message; null once shown or stopped
@@ -571,16 +578,46 @@ function request(url, fresh){
   });
   return r.promise;
 }
-// Resolves once the stylesheet has applied and both scripts have run.
+// Resolves once the stylesheet has applied, all three scripts have run and the pmtiles:// protocol
+// that reads basemap/oaxaca.pmtiles is registered.
 function loadMaplibre(fresh){
   var js = (window.maplibregl ? Promise.resolve() : request(MAPLIBRE_JS, fresh))
     .then(function(){
       // The adapter binds to window.maplibregl when it runs, so never load it without one.
       if (!window.maplibregl) { var e = new Error("MapLibre did not run"); e.unsupported = true; throw e; }
-      return L.MaplibreGL ? null : request(ADAPTER_JS, fresh);
+      return Promise.all([
+        L.MaplibreGL ? null : request(ADAPTER_JS, fresh),
+        window.pmtiles ? null : request(PMTILES_JS, fresh)
+      ]);
     })
-    .then(function(){ if (!L.MaplibreGL) throw new Error("MapLibre adapter did not load"); });
+    .then(function(){
+      if (!L.MaplibreGL) throw new Error("MapLibre adapter did not load");
+      if (!window.pmtiles) throw new Error("PMTiles did not load");
+      // pmtiles caches the archive header, a failed fetch included, so Retry starts with a new cache.
+      if (!pmtilesProtocol || fresh) {
+        pmtilesProtocol = new pmtiles.Protocol();
+        maplibregl.removeProtocol("pmtiles");
+        maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile);
+      }
+    });
   return Promise.all([request(MAPLIBRE_CSS, fresh), js]);
+}
+// basemap/style.json uses URLs relative to this page. MapLibre needs absolute ones; they are joined
+// as plain strings so the {fontstack} and {range} placeholders stay unencoded.
+function loadStyle(){
+  return fetch(STREET_STYLE).then(function(r){
+    if (!r.ok) throw new Error("Street style: HTTP " + r.status);
+    return r.json();
+  }).then(function(style){
+    var base = location.href.replace(/[?#].*$/, "").replace(/[^\/]*$/, "");
+    Object.keys(style.sources).forEach(function(k){
+      var s = style.sources[k];
+      if (s.url && s.url.indexOf("pmtiles://") === 0) s.url = "pmtiles://" + base + s.url.slice("pmtiles://".length);
+    });
+    style.glyphs = base + style.glyphs;
+    style.sprite = base + style.sprite;
+    return style;
+  });
 }
 // Overrides of adapter 0.1.4 internals; recheck both when the adapter version changes.
 function streetLayerClass(){
@@ -660,16 +697,19 @@ function streetsReady(layer){
   showSimplified(false);
   streetStatus("", false);
 }
-function addStreetLayer(){
+function addStreetLayer(style){
   var Layer = streetLayerClass();
-  var layer = new Layer({style:STREET_STYLE, interactive:false, attributionControl:false});
+  var layer = new Layer({style:style, interactive:false, attributionControl:false});
   streetLayer = layer;
   setCredits();
   layer.addTo(map);
   var gl = layer.getMaplibreMap();
   gl.on("style.load", function(){
     gl.getStyle().layers.forEach(function(l){
-      if (l.type === "symbol" && HIDDEN_LABELS[l["source-layer"]]) gl.setLayoutProperty(l.id, "visibility", "none");
+      if (l.type !== "symbol") return;
+      if (HIDDEN_LABELS[l["source-layer"]]) gl.setLayoutProperty(l.id, "visibility", "none");
+      // Positron's place filters are all expressions, so the exclusion can be appended to them.
+      else if (l["source-layer"] === "place") gl.setFilter(l.id, l.filter ? ["all", l.filter, SHOW_PLACE] : SHOW_PLACE);
     });
   });
   // Ready means drawn. MapLibre keeps loading while the WebGL context is lost and can reach idle with
@@ -723,14 +763,16 @@ function addStreetLayer(){
 }
 function loadStreets(fresh){
   if (streetPhase === "loading" || streetPhase === "ready") return;
+  // Browsers won't let a page opened from disk fetch the tile archive or style.
+  if (location.protocol === "file:") { streetStatus("The street map needs the page served over HTTP (see the README). Showing a simplified map.", false); return; }
   if (!hasWebGL()) { streetStatus("Street map needs WebGL, which isn't available here. Showing a simplified map.", false); return; }
   var attempt = ++streetAttempt;
   streetPhase = "loading";
   streetStatus("Loading streets…", false);
   slowLeft = SLOW_MS;
   slowClock();
-  loadMaplibre(fresh).then(function(){
-    if (attempt === streetAttempt) addStreetLayer();
+  Promise.all([loadMaplibre(fresh), loadStyle()]).then(function(r){
+    if (attempt === streetAttempt) addStreetLayer(r[1]);
   }).catch(function(e){
     if (attempt !== streetAttempt) return;
     console.warn("Street basemap unavailable", e);
